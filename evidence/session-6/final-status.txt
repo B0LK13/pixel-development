@@ -1,0 +1,12 @@
+Session 6 final status
+Branch: auto/session-6-evidence (evidence + audit addendum + final report)
+Predecessor integration tip: 778cfc1 (gate 281/0/0)
+Evidence commits on this branch:
+  1. chore: capture session 6 evidence (baseline, test results, timings,
+     release-verify capture, audit addendum)
+  2. (this file + ci-parity capture + reports/session-6-final-report.md)
+Final integration merge: performed after this branch's post-merge gate;
+the resulting auto/integrate-session-6 tip is recorded in the session
+chat completion report.
+Safety: no push, main unchanged at 711c23b, no tags, no releases, no
+production keys, no secrets accessed, no paid agents invoked.
