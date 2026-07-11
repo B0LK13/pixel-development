@@ -230,3 +230,49 @@ CI — those binaries occupy the preflight's scrubbed PATH prefix
 (`/root/.npm-global/bin:/root/.local/bin:/usr/local/bin:/usr/bin:/bin`), so
 a controlled-PATH absence test cannot be made hermetic without a new seam,
 and no seam is added solely for testing.
+
+## Session 4 follow-up (main @ 711c23b + auto/integrate-session-4)
+
+- **Integration.** Session 3 (`79617f4`, carrying Session 1–2 via `2bb8df1`)
+  was promoted to `main` as `711c23b` (`--no-ff`, not pushed). Session 4
+  follow-up work rides `auto/integrate-session-4` for operator review.
+- **Preflight testability — implemented.** The caveat above is closed:
+  dependency resolution is centralized in `resolve_required_tool`
+  (`pixel-autodev.sh:99-117`) with per-tool override seams (`TIMEOUT_BIN`,
+  `GIT_BIN`, `CLAUDE_BIN`, `CODEX_BIN`). Set-empty simulates absence, so the
+  missing-`timeout`/missing-`git`/missing-agent die paths are now hermetically
+  tested (harness §15), including validation-before-resolution ordering and
+  no-state-on-failure. Production behavior with seams unset is byte-identical.
+- **R1 — implemented (scoped).** `pixel-bootstrap.sh` now downloads the two
+  setup scripts to a temp file, verifies SHA-256 against vendored pins
+  (`config/bootstrap-checksums.txt` + embedded copies, sync enforced by
+  harness §16), and installs only on match — failing closed on download
+  failure, missing digest, missing hash tool, or mismatch (temp removed via
+  `EXIT` trap). This also fixes the latent defect where a failed curl left a
+  partial, later-executed file in `$DEST`. Hermetic proof via `curl file://`
+  fixtures (harness §17): no public network needed.
+  - **Threat model / what the pins do and do not buy.** They give integrity
+    against drift, mirror substitution (a `--repo-base` mirror is now safe
+    for the pinned content), truncation, and maintainer inconsistency
+    (lockstep test goes red). They do **not** give authenticity: the trust
+    anchor — `pixel-bootstrap.sh` itself — still arrives over the same
+    unauthenticated `curl | bash` channel as the payloads, so an attacker who
+    can substitute payloads can substitute the anchor and its embedded pins.
+  - **Residual blocked sub-item (formal).** Authenticity for the anchor
+    itself. Prerequisites: (1) upstream signed releases (minisign/gpg) or an
+    out-of-band checksum channel the user verifies once (e.g. a digest
+    published on an independent page and pasted at install time); (2) a
+    signature-verification tool present in Termux; (3) migration of the
+    README one-liner to "fetch → verify → execute". Acceptance criteria:
+    anchor verified before execution with a key established out of band;
+    hermetic fixture tests mirroring §17. Until then the README privacy
+    section documents the TLS-only trust level.
+  - The third-party installer pipes inside `pixel-dev-setup.sh`
+    (nodesource, claude.ai, astral.sh) remain as-is under the charter's
+    package-install exception — different trust boundary (vendor CLIs, not
+    this repo's payloads), out of R1's scope.
+- **CI.** Added the one gate the workflow did not execute directly
+  (`git diff --check`); trigger rules unchanged, `auto/*` still covered.
+  Remote CI remains operator-owned (no push this session).
+- **R4** — unchanged: document-only; `--` stays an unknown flag (exit 2),
+  pinned by harness §7/§12.

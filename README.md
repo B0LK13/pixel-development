@@ -224,6 +224,7 @@ and `auto/*` and on every pull request — local tests only, `contents: read`,
 - `--ssh-port` uses equals syntax only and must be an integer in **1–65535** (`--ssh-port=9022`).
 - `--timeout` defaults to **1200 seconds**; `--max-tasks`, `--max-turns`, `--budget`, and `--timeout` are all validated before anything runs (malformed input = exit 2, no state touched).
 - `--agent` accepts only `claude` or `codex`; `--dry-run` never invokes an agent and needs no agent binary installed.
+- `pixel-bootstrap.sh` verifies network-fetched setup scripts against pinned SHA-256 digests before installing them (fail closed on mismatch); pins live in `config/bootstrap-checksums.txt`.
 - Full flag contract: [`docs/CLI_CONTRACT.md`](docs/CLI_CONTRACT.md).
   Security + portability audit: [`docs/AUTONOMOUS_AUDIT.md`](docs/AUTONOMOUS_AUDIT.md).
 
