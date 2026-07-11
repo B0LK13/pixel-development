@@ -1424,6 +1424,73 @@ else
   t_fail "reproducibility fixtures" "clone failed"
 fi
 
+# --- 28. release documentation contracts (§5 docs + verifier hygiene) -------------
+SIGN_DOC="$ROOT/docs/RELEASE_SIGNING.md"
+KEY_DOC="$ROOT/docs/SIGNING_KEY_LIFECYCLE.md"
+RCI_DOC="$ROOT/docs/REMOTE_CI_VERIFICATION.md"
+
+# 28a. signing doc: operator sign + verify commands and the core policy
+if [ -f "$SIGN_DOC" ] \
+   && grep -qF -- '--detach-sign --armor' "$SIGN_DOC" \
+   && grep -qF -- '--require-signature' "$SIGN_DOC" \
+   && grep -qi 'never replaces checksum verification' "$SIGN_DOC"; then
+  t_ok "RELEASE_SIGNING.md: sign/verify commands + signature-never-replaces-checksums policy"
+else t_fail "RELEASE_SIGNING.md contract" "missing command or policy"; fi
+
+# 28b. key lifecycle doc: covers the full lifecycle, carries no key material,
+#      and marks fixture keys non-production
+if [ -f "$KEY_DOC" ] \
+   && grep -qi 'rotation' "$KEY_DOC" && grep -qi 'revocation' "$KEY_DOC" \
+   && grep -qi 'compromise' "$KEY_DOC" && grep -qi 'backup' "$KEY_DOC" \
+   && grep -qi 'non-production' "$KEY_DOC" \
+   && ! grep -q 'PRIVATE KEY-----' "$KEY_DOC"; then
+  t_ok "SIGNING_KEY_LIFECYCLE.md: lifecycle covered, no key material, fixtures marked non-production"
+else t_fail "SIGNING_KEY_LIFECYCLE.md contract" "missing topic or leaked key material"; fi
+
+# 28c. remote CI runbook: inspect commands, review-branch cleanup, merge criteria
+if [ -f "$RCI_DOC" ] \
+   && grep -qF 'gh run list' "$RCI_DOC" && grep -qF 'gh run watch' "$RCI_DOC" \
+   && grep -qF -- 'git push origin --delete' "$RCI_DOC" \
+   && grep -qi 'merge criteria' "$RCI_DOC"; then
+  t_ok "REMOTE_CI_VERIFICATION.md: gh inspection + branch cleanup + merge criteria"
+else t_fail "REMOTE_CI_VERIFICATION.md contract" "missing runbook element"; fi
+
+# 28d. none of the three docs restores pipe-to-shell installation
+if grep -hE '\|[[:space:]]*(ba)?sh([[:space:]]|$)' "$SIGN_DOC" "$KEY_DOC" "$RCI_DOC" 2>/dev/null | grep -q .; then
+  t_fail "release docs pipe-to-shell" "found '| sh/bash' in a release doc"
+else
+  t_ok "release docs contain no pipe-to-shell installation"
+fi
+
+# 28e. README §11 points at all three release docs
+if grep -qF 'docs/RELEASE_SIGNING.md' "$ROOT/README.md" \
+   && grep -qF 'docs/SIGNING_KEY_LIFECYCLE.md' "$ROOT/README.md" \
+   && grep -qF 'docs/REMOTE_CI_VERIFICATION.md' "$ROOT/README.md"; then
+  t_ok "README §11 links the release signing, key lifecycle, and remote CI docs"
+else t_fail "README release-doc pointers" "missing link"; fi
+
+# 28f. release process records the archive-handling decision
+if grep -q 'Archive handling' "$ROOT/docs/BOOTSTRAP_RELEASE_PROCESS.md"; then
+  t_ok "BOOTSTRAP_RELEASE_PROCESS.md documents the archive-handling decision"
+else t_fail "release process archive section" "missing"; fi
+
+# 28g. the bundle verifier is side-effect free: a verify run leaves the bundle
+#      byte-identical (invariant 18). Reuses the §27a fixture bundle.
+vb="$tmp/repro/a/pixel-development-1.0.0"
+if [ -d "$vb" ]; then
+  before="$(tree_hashes "$vb")"
+  bash "$ROOT/scripts/verify-release-bundle.sh" --bundle="$vb" >/dev/null 2>&1
+  vrc=$?
+  after="$(tree_hashes "$vb")"
+  if [ "$vrc" -eq 0 ] && [ "$before" = "$after" ]; then
+    t_ok "verify-release-bundle.sh is side-effect free (bundle byte-identical after verify)"
+  else
+    t_fail "verifier side effects" "rc=$vrc or bundle changed"
+  fi
+else
+  t_fail "verifier side-effect fixture" "§27 bundle missing"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
