@@ -376,6 +376,25 @@ if [ $rc -eq 0 ]; then t_ok "duplicate --agent: later valid overrides earlier in
 bash "$ROOT/pixel-autodev.sh" --agent=claude --agent=foo --workspace=/nonexistent-pixel-ws >/dev/null 2>&1; rc=$?
 if [ $rc -eq 2 ]; then t_ok "duplicate --agent: later invalid rejected (last-wins validated)"; else t_fail "duplicate --agent invalid-last" "rc=$rc"; fi
 
+# --- 12. end-of-options + positional arguments (all scripts) ----------------------
+# Contract: '--' has no special meaning (unknown flag → exit 2) and no script
+# accepts positional arguments — nothing is silently ignored or passed through.
+# (bootstrap '--' is already pinned in section 7.)
+for s in pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh; do
+  bash "$ROOT/$s" -- >/dev/null 2>&1; rc=$?
+  if [ $rc -eq 2 ]; then t_ok "'--' rejected as unknown flag: $s"; else t_fail "'--' handling: $s" "rc=$rc (want 2)"; fi
+done
+for s in "${SCRIPTS[@]}"; do
+  bash "$ROOT/$s" -- --help >/dev/null 2>&1; rc=$?
+  if [ $rc -eq 2 ]; then t_ok "'-- --help' still exit 2 ('--' does not enable pass-through): $s"; else t_fail "'--' pass-through: $s" "rc=$rc (want 2)"; fi
+  bash "$ROOT/$s" extra-positional-arg >/dev/null 2>&1; rc=$?
+  if [ $rc -eq 2 ]; then t_ok "positional argument rejected: $s"; else t_fail "positional arg: $s" "rc=$rc (want 2)"; fi
+done
+# positional trailing AFTER a valid flag is still rejected (nothing trailing is
+# silently ignored)
+bash "$ROOT/pixel-autodev.sh" --max-tasks=1 extra >/dev/null 2>&1; rc=$?
+if [ $rc -eq 2 ]; then t_ok "trailing positional after valid flag rejected: pixel-autodev.sh"; else t_fail "trailing positional" "rc=$rc (want 2)"; fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"

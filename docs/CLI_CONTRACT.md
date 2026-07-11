@@ -13,7 +13,13 @@ All four scripts parse flags the same way (a `case` loop over `"$@"`):
   and falls through to the unknown-flag handler.
 - **Duplicate flags**: processed left to right; the **last occurrence wins**.
 - **`--` has no special meaning** today — it is treated as an unknown flag
-  (exit 2). Documented here rather than changed, for backward compatibility.
+  (exit 2). Documented here rather than changed, for backward compatibility
+  (audit R4: no script forwards arguments to another command, so there is no
+  concrete need for an end-of-options marker). Pinned for all four scripts by
+  harness §7/§12, including `-- --help` (still exit 2 — `--` enables nothing).
+- **Positional arguments are not accepted**: anything that is not a recognised
+  flag hits the unknown-flag arm (exit 2), including trailing values after
+  valid flags. Nothing is silently ignored or passed through (harness §12).
 - **Unknown flag** → prints `Unknown flag: <flag> (try --help)` and exits **2**.
 - **`--help` / `-h`** → prints the header comment block, exits **0**. Parsing
   happens before every preflight, so `--help` and usage errors behave
