@@ -395,6 +395,27 @@ done
 bash "$ROOT/pixel-autodev.sh" --max-tasks=1 extra >/dev/null 2>&1; rc=$?
 if [ $rc -eq 2 ]; then t_ok "trailing positional after valid flag rejected: pixel-autodev.sh"; else t_fail "trailing positional" "rc=$rc (want 2)"; fi
 
+# --- 13. tool preflight contract (pixel-autodev.sh) --------------------------------
+# 13a. dry-run must not require paid-agent executables: preflight skips agent
+#      resolution entirely (asserted via the skip line — hermetic on any host).
+out="$(PATH="$APATH" bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$ws10" 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"dry-run: skipping agent resolution"*) true;; *) false;; esac; then
+  t_ok "dry-run skips agent resolution (no paid-agent executable required)"
+else
+  t_fail "dry-run agent skip" "rc=$rc"$'\n'"$out"
+fi
+# 13b. non-dry-run still resolves the agent in preflight. CLAUDE_BIN is pinned
+#      to the no-op stub so dispatch can never reach a real (paid) agent.
+ws13="$tmp/ws13"; mk_ws "$ws13"
+printf -- '- [ ] Probe preflight agent resolution\n' > "$ws13/BACKLOG.md"
+git -C "$ws13" add -A && git -C "$ws13" commit -qm task >/dev/null
+out="$(env PATH="$APATH" CLAUDE_BIN="$tmp/bin/claude" bash "$ROOT/pixel-autodev.sh" --workspace="$ws13" --max-tasks=1 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"agent: claude ("*) true;; *) false;; esac; then
+  t_ok "non-dry-run resolves the agent in preflight (dispatch stays stub-pinned)"
+else
+  t_fail "non-dry-run agent resolution" "rc=$rc"$'\n'"$out"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
