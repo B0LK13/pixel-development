@@ -1,0 +1,21 @@
+Session 6 baseline record
+Base selection (per charter):
+- selected base branch: auto/integrate-session-5
+- selected base commit: a97d95b (Session 5 integration tip)
+- current main commit: 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c
+- Session 5 ancestry: intact; main does NOT contain Session 4-5 (operator
+  has not merged them); integrate-session-6 created directly from a97d95b
+- starting test result: 199 passed / 0 failed / 0 skipped
+  (bash tests/run_tests.sh and bash scripts/ci-local.sh, both green)
+- working-tree status at start: clean
+Integration branch created: auto/integrate-session-6 (from a97d95b)
+Task branches merged, in order:
+  1. auto/release-candidate-builder  (461c2bd, merge aad007c, gate 224)
+  2. auto/fix-rc-fixture-clone       (eba84d5, merge c1a59c7, gate 226)
+  3. auto/release-bundle-verifier    (fddd3dc, merge ea8a627, gate 264)
+  4. auto/release-reproducibility    (2811106, merge e759b4b, gate 267)
+  5. auto/release-ci-gates           (6e9aab0, merge 56aaf16, gate 274)
+  6. auto/release-docs               (d230655, merge 778cfc1, gate 281)
+  7. auto/session-6-evidence         (this branch)
+Every gate ran on the committed tree; every merge was followed by a
+post-merge full gate. No conflicts. main untouched throughout.

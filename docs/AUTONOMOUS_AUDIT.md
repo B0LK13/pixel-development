@@ -339,3 +339,59 @@ and no seam is added solely for testing.
 - **Remote CI** — not run (no push). Static workflow validation plus local
   parity only; operator-triggered run instructions are in
   `reports/session-5-final-report.md`.
+
+## Session 6 follow-up (main @ 711c23b + auto/integrate-session-6)
+
+- **Release-candidate builder — implemented.**
+  `scripts/build-release-candidate.sh` assembles a deterministic 9-file
+  bundle directory (the three pinned scripts, `bootstrap-checksums.txt`,
+  `SHA256SUMS`, `RELEASE-METADATA.json`, `SIGNING-MANIFEST.json`,
+  `INSTALL.md`, `VERIFY.md`). Strict SemVer via `--version=X.Y.Z`, dirty-tree
+  refusal (untracked included), full-40-hex commit capture, checksum-manifest
+  lockstep gate, atomic temp-then-rename output, `SOURCE_DATE_EPOCH` pinning
+  for created_at and mtimes. Failure injection covered by harness §24.
+- **Release metadata + signing manifest — implemented.** Schema v1 with
+  deterministic one-line sorted artifact objects, lowercase SHA-256, role and
+  mode policy, traversal/duplicate rejection. `SIGNING-MANIFEST.json` binds
+  version + commit + `release_metadata_sha256` + artifact digests and names
+  the expected detached signature (`SIGNING-MANIFEST.json.asc`).
+- **Offline bundle verifier — implemented.**
+  `scripts/verify-release-bundle.sh` checks layout allowlist → metadata
+  schema → manifest consistency → optional `gpgv` signature → checksums,
+  modes, and `SHA256SUMS` agreement, in that order. Verdicts:
+  `verified-integrity-only` / `verified-signed` / `failed-layout` /
+  `failed-metadata` / `failed-signature` / `failed-checksum` /
+  `failed-policy`; exit 0/1/2. Failure injection per layer in harness §25;
+  signed ed25519 fixtures in §26 (valid sig, altered artifact, altered
+  metadata, wrong keyring, missing signature, `--require-signature`).
+- **Reproducibility — proven, not claimed.** Two independent
+  `SOURCE_DATE_EPOCH`-pinned builds from the same commit are byte-identical
+  (content, modes, mtimes; harness §27, evidence/session-6/reproducibility.txt).
+  A different epoch changes only the two JSON files.
+- **Archive handling — decision recorded.** The canonical release artifact is
+  the bundle *directory*; deterministic GNU-tar packaging is documented as an
+  operator/CI step, never a release gate; `.zip` is not produced.
+  (`docs/BOOTSTRAP_RELEASE_PROCESS.md` §6.)
+- **CI release validation — implemented, publish-free.** The workflow gained
+  a bounded `release-candidate-check` job: fixture build with reserved
+  version `0.0.0`, unsigned verify, second-build reproducibility (`diff -r`),
+  then a per-run throwaway ed25519 key for the signed `--require-signature`
+  verify. No tags, releases, pushes, or production identities; contract
+  pinned by harness §22.
+- **Operator documentation — implemented.** `docs/RELEASE_SIGNING.md`
+  (offline sign + verify + policy), `docs/SIGNING_KEY_LIFECYCLE.md`
+  (custody/rotation/revocation/compromise, no key material),
+  `docs/REMOTE_CI_VERIFICATION.md` (push/watch/inspect/cleanup runbook);
+  README §11 links all three; harness §28 pins the doc contracts and proves
+  the verifier side-effect free (invariant 18).
+- **Test runtime — classified, not filtered.** The default suite remains the
+  only sanctioned gate and runs everything; `PIXEL_TESTS_NO_CLONE=1` stays a
+  documented dev convenience. Wall time grew with the release sections
+  (isolated components are fast: clone ≈2s, builder ≈3s, verifier ≈3s;
+  multi-minute variance on this host is thermal throttling, measured, not a
+  suite defect). No assertion removed; no harness filters added.
+- **R-items** — unchanged from Session 5. R4 remains document-only (`--`
+  stays an unknown flag, exit 2).
+- **Remote CI** — not run (no push). Static workflow validation plus local
+  parity (`scripts/ci-local.sh`) only; the operator runbook is
+  `docs/REMOTE_CI_VERIFICATION.md`.

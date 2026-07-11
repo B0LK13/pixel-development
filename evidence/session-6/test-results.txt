@@ -1,0 +1,36 @@
+Session 6 test results (gate chain)
+Suite command: bash tests/run_tests.sh (hermetic; no network, no paid agents)
+All counts below are observed outputs of full gates run on committed trees.
+
+stage                                  passed failed skipped  delta
+Session 5 baseline (start)             199    0      0        -
+branch 1 release-candidate-builder     224    0      0        +25
+fix branch idempotent rc fixture clone 226    0      0        +2
+branch 2 release-bundle-verifier       264    0      0        +38
+branch 3 reproducibility               267    0      0        +3
+branch 4 release-ci-gates              274    0      0        +7
+branch 5 release-docs                  281    0      0        +7
+post-merge gate after every merge      green  0      0        -
+
+New coverage this session, by harness section:
+  section 22 extended - workflow release-candidate-check contract
+    (job exists + bounded, all four mechanisms exercised, hermetic-suite
+    parity, no publish/push step)
+  section 24 - release-candidate builder: flags, version validation,
+    dirty-tree refusal, lockstep gate, atomic output, failure injection
+  section 25 - bundle verifier: layout/metadata/manifest/checksum failure
+    injection, verdict and exit-code contract
+  section 26 - signed fixtures: ephemeral ed25519 keys, valid signature,
+    altered artifact, altered metadata, wrong keyring, missing signature,
+    --require-signature policy
+  section 27 - reproducibility: SDE-pinned byte-identical builds, different
+    epoch changes only the two JSON files, non-numeric SDE rejected
+  section 28 - release doc contracts (signing/key-lifecycle/remote-CI docs,
+    README links, no pipe-to-shell, archive decision) plus proof that the
+    verifier leaves a bundle byte-identical (invariant 18)
+Interim reds (fixed pre-commit, never committed red):
+  - section 22: grep treated the '--require-signature' pattern as an option;
+    fixed with an explicit '--' separator
+  - section 28a: the contracted policy sentence wrapped across lines;
+    re-wrapped onto one line
+Clean-clone smoke: passes inside every full gate (section 8).
