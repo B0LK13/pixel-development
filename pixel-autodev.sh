@@ -52,12 +52,29 @@ for a in "$@"; do case "$a" in
 esac; done
 [ -z "$BACKLOG" ] && BACKLOG="$WORKSPACE/BACKLOG.md"
 
-# Validate --timeout before any environment checks: positive integer only
-# (rejects empty, non-numeric, negative, and zero — a usage error, exit 2).
-case "$TIMEOUT" in
-  ''|*[!0-9]*) echo "pixel-autodev: --timeout must be a positive integer (got '$TIMEOUT')" >&2; exit 2 ;;
+# Validate numeric flags before any environment checks — a usage error is
+# exit 2, names the flag on stderr, and touches no state. Validation is pure
+# string logic (no arithmetic expansion), so there are no octal/overflow edge
+# cases; leading zeros are tolerated (0800 == 800).
+bad_value(){ echo "pixel-autodev: $1 must be $2 (got '$3')" >&2; exit 2; }
+is_posint(){ # digits only, with at least one non-zero digit
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ -n "${1#"${1%%[!0]*}"}" ]
+}
+is_posint "$TIMEOUT"    || bad_value --timeout "a positive integer" "$TIMEOUT"
+is_posint "$MAX_TURNS"  || bad_value --max-turns "a positive integer" "$MAX_TURNS"
+# --max-tasks drives shell arithmetic at the loop bound, so it is canonicalised
+# (leading zeros stripped) and range-checked: 1–999999.
+is_posint "$MAX_TASKS"  || bad_value --max-tasks "an integer between 1 and 999999" "$MAX_TASKS"
+MAX_TASKS="${MAX_TASKS#"${MAX_TASKS%%[!0]*}"}"
+[ "${#MAX_TASKS}" -le 6 ] || bad_value --max-tasks "an integer between 1 and 999999" "$MAX_TASKS"
+# --budget is decimal dollars passed to the agent CLI; bash never does float
+# math with it. Require digits with at most one dot, a digit on each side of
+# it, and a non-zero value (rejects "0", "0.00", ".5", "2.", "1.2.3").
+case "$BUDGET" in
+  ''|*[!0-9.]*|*.*.*|.*|*.) bad_value --budget "a positive number (e.g. 2.00)" "$BUDGET" ;;
 esac
-[ "$TIMEOUT" -gt 0 ] || { echo "pixel-autodev: --timeout must be a positive integer (got '$TIMEOUT')" >&2; exit 2; }
+[ -n "${BUDGET//[0.]/}" ] || bad_value --budget "a positive number (e.g. 2.00)" "$BUDGET"
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_R=$'\033[0m'; C_B=$'\033[1m'; C_DIM=$'\033[2m'
