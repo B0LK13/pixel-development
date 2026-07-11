@@ -74,7 +74,9 @@ mkdir -p "$tmp/bin"
 # stub agents/tools so the suite is hermetic on any host (CI may lack them).
 # autodev's preflight resolves these by name; agent dispatch itself goes
 # through the CLAUDE_BIN/CODEX_BIN seams, so no real agent is ever invoked.
-for tool in claude codex; do
+# pkg backs the bootstrap Termux preflight so download-verification tests can
+# run outside Termux.
+for tool in claude codex pkg; do
   printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/$tool"
   chmod +x "$tmp/bin/$tool"
 done
@@ -496,6 +498,119 @@ if [ $rc -eq 1 ] && [ ! -e "$pwn" ]; then
   t_ok "metacharacter seam value is never executed (quoted throughout)"
 else
   t_fail "seam injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"
+fi
+
+# --- 16. bootstrap checksum manifest lockstep (audit R1) --------------------------
+MANIFEST="config/bootstrap-checksums.txt"
+manifest_sha(){ awk -v n="$1" '$1 ~ /^[0-9a-fA-F]{64}$/ && $2 == n {print tolower($1); f=1} END{exit !f}' "$MANIFEST" 2>/dev/null; }
+embedded_sha(){ grep -A1 -- "$1)" "$ROOT/pixel-bootstrap.sh" | grep -oE '[0-9a-f]{64}' | head -1; }
+file_sha(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | awk '{print $1}'; }
+
+if [ -f "$MANIFEST" ] && manifest_sha pixel-dev-setup.sh >/dev/null && manifest_sha pixel-apps-setup.sh >/dev/null; then
+  t_ok "checksum manifest exists and covers both fetched scripts"
+else
+  t_fail "checksum manifest must pin both fetched scripts"
+fi
+for s in pixel-dev-setup.sh pixel-apps-setup.sh; do
+  if [ "$(manifest_sha "$s")" = "$(file_sha "$ROOT/$s")" ]; then
+    t_ok "manifest pin matches repo content: $s (lockstep)"
+  else
+    t_fail "manifest out of sync with $s" "manifest=$(manifest_sha "$s") file=$(file_sha "$ROOT/$s")"
+  fi
+  if [ "$(embedded_sha "$s")" = "$(manifest_sha "$s")" ]; then
+    t_ok "embedded digest matches manifest: $s"
+  else
+    t_fail "embedded digest out of sync: $s" "embedded=$(embedded_sha "$s") manifest=$(manifest_sha "$s")"
+  fi
+done
+# The R1-scoped downloads never pipe remote content into a shell. The only
+# piped installer left in the file is the chartered claude.ai updater inside
+# the quoted 5-Update-AI shortcut body (audit F8 — out of scope here).
+pipes="$(grep -cE 'curl[^#]*\|[[:space:]]*(bash|sh)\b' "$ROOT/pixel-bootstrap.sh")"
+if [ "$pipes" -eq 1 ] && grep -E 'curl[^#]*\|[[:space:]]*(bash|sh)\b' "$ROOT/pixel-bootstrap.sh" | grep -q 'claude.ai/install.sh'; then
+  t_ok "no unverified curl|bash in bootstrap downloads (only chartered updater shortcut remains)"
+else
+  t_fail "unexpected curl|bash in pixel-bootstrap.sh" "matches: $pipes"
+fi
+n="$(grep -c 'curl -fsSL -o "\$DLTMP/\$s" "\$REPO_BASE/\$s"' "$ROOT/pixel-bootstrap.sh")"
+d="$(grep -c 'curl -fsSL -o "\$DEST/' "$ROOT/pixel-bootstrap.sh" || true)"
+if [ "$n" -eq 1 ] && [ "$d" -eq 0 ]; then
+  t_ok "downloads land in a temp file, never directly in \$DEST"
+else
+  t_fail "download-to-temp wiring" "temp=$n direct=$d"
+fi
+
+# --- 17. bootstrap download verification, functional (audit R1) --------------------
+# Hermetic "web root": curl's file:// scheme, no network. The Termux preflight
+# is satisfied by the pkg stub + PREFIX; each case gets a fresh HOME (with a
+# space) and runs from a neutral cwd so the download path is forced.
+dlroot="$tmp/dlroot"; mkdir -p "$dlroot/valid" "$dlroot/corrupt"
+cp "$ROOT/pixel-dev-setup.sh" "$ROOT/pixel-apps-setup.sh" "$dlroot/valid/"
+cp "$ROOT/pixel-dev-setup.sh" "$ROOT/pixel-apps-setup.sh" "$dlroot/corrupt/"
+printf 'tampered\n' >> "$dlroot/corrupt/pixel-dev-setup.sh"
+dlurl(){ printf 'file://%s' "${1// /%20}"; }   # percent-encode the space in $tmp
+BOOT_DEST=; BOOT_SHORT=
+run_boot(){ # env-assignments… then: bash "$ROOT/pixel-bootstrap.sh" args…
+  local h; h="$(mktemp -d "${tmp}/boot home.XXXXXX")"
+  BOOT_DEST="$h/.local/share/pixel"; BOOT_SHORT="$h/.shortcuts"
+  out="$(cd "$tmp" && env HOME="$h" PREFIX="$h/prefix" PATH="$APATH" "$@" 2>&1)"; rc=$?
+}
+dl_leftovers(){ ls -d /tmp/pixel-dl.* 2>/dev/null | wc -l; }
+
+# 17a. valid content verifies against the EMBEDDED digests (production path) and
+#      gets installed; shortcuts then get created.
+run_boot bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")"
+if [ $rc -eq 0 ] && case "$out" in *"pixel-dev-setup.sh (downloaded, sha256 verified)"*"pixel-apps-setup.sh (downloaded, sha256 verified)"*) true;; *) false;; esac \
+   && [ -f "$BOOT_DEST/pixel-dev-setup.sh" ] && [ -f "$BOOT_DEST/pixel-apps-setup.sh" ]; then
+  t_ok "valid downloads verify (sha256) and install"
+else
+  t_fail "valid download path" "rc=$rc"$'\n'"$out"
+fi
+if [ -f "$BOOT_SHORT/3-Apps-Setup" ]; then
+  t_ok "shortcuts created only after verified installs"
+else
+  t_fail "shortcuts missing after verified install"
+fi
+
+# 17b. mismatched content fails closed BEFORE install — nothing in DEST, no
+#      shortcut files, no temp leftovers.
+run_boot bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/corrupt")"
+if [ $rc -eq 1 ] && case "$out" in *"checksum mismatch for pixel-dev-setup.sh"*) true;; *) false;; esac \
+   && [ ! -e "$BOOT_DEST/pixel-dev-setup.sh" ] && [ "$(find "$BOOT_SHORT" -type f 2>/dev/null | wc -l)" -eq 0 ] \
+   && [ "$(dl_leftovers)" -eq 0 ]; then
+  t_ok "checksum mismatch fails closed (no install, no shortcuts, no temp)"
+else
+  t_fail "mismatch path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17c. failed download: die clearly, no partial file in DEST, temp cleaned.
+run_boot bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/nonexistent")"
+if [ $rc -eq 1 ] && case "$out" in *"could not download pixel-dev-setup.sh"*) true;; *) false;; esac \
+   && [ -z "$(ls -A "$BOOT_DEST" 2>/dev/null)" ] && [ "$(dl_leftovers)" -eq 0 ]; then
+  t_ok "failed download installs no partial content (temp cleaned)"
+else
+  t_fail "download-failure path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17d. missing checksum entry fails closed via the seam manifest (dev-setup is
+#      pinned there, apps-setup is not → run stops at apps-setup).
+printf '%s  pixel-dev-setup.sh\n' "$(file_sha "$ROOT/pixel-dev-setup.sh")" > "$tmp/manifest-missing.txt"
+run_boot env PIXEL_BOOTSTRAP_CHECKSUM_FILE="$tmp/manifest-missing.txt" \
+  bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")"
+if [ $rc -eq 1 ] && case "$out" in *"no pinned checksum for pixel-apps-setup.sh"*) true;; *) false;; esac \
+   && [ ! -e "$BOOT_DEST/pixel-apps-setup.sh" ]; then
+  t_ok "missing checksum entry fails closed (apps-setup not installed)"
+else
+  t_fail "missing-entry path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17e. metacharacters in the repo-base URL reach curl only as a quoted argument.
+pwn="$tmp/pwned-dl"; rm -f "$pwn"
+run_boot bash "$ROOT/pixel-bootstrap.sh" "--repo-base=file:///tmp/nope;\$(touch $pwn)"
+if [ $rc -eq 1 ] && [ ! -e "$pwn" ]; then
+  t_ok "metacharacter repo-base value is never executed"
+else
+  t_fail "repo-base injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"
 fi
 
 # --- summary ---------------------------------------------------------------------
