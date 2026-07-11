@@ -1,0 +1,23 @@
+=== case 1: TIMEOUT_BIN= (GNU timeout missing) ===
+
+✖ GNU timeout (coreutils) is required in the devbox
+exit=1
+ws1 contents: []
+=== case 2: GIT_BIN= (git missing) ===
+
+✖ git not installed in devbox
+exit=1
+ws2 contents: []
+=== case 3: CLAUDE_BIN= (agent missing, non-dry-run) ===
+
+✖ 'claude' not found. Enter the devbox and install the AI stack first.
+exit=1
+ws3 contents: []
+=== case 4: invalid CLI + all tools missing (validation beats preflight) ===
+pixel-autodev: --max-tasks must be an integer between 1 and 999999 (got '0')
+exit=2
+ws4 contents: []
+=== case 5: dry-run with both agents missing (valid run; seeds preview state by design) ===
+  • dry-run: skipping agent resolution (no agent is invoked)
+  ✔ seeded charter: PIXEL_AGENT.md
+exit=0 (dry-run success; state seeding is intended for valid input)

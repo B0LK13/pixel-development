@@ -1,0 +1,31 @@
+Integration diff summary — session 4
+====================================
+
+--- auto/integrate-session-4 vs main (session 4 scope only) ---
+ .github/workflows/test.yml             |   2 +
+ README.md                              |   1 +
+ config/bootstrap-checksums.txt         |  20 ++++
+ docs/AUTONOMOUS_AUDIT.md               |  46 +++++++++
+ docs/CLI_CONTRACT.md                   |  72 ++++++++++---
+ pixel-autodev.sh                       |  44 ++++++--
+ pixel-bootstrap.sh                     |  53 +++++++++-
+ reports/session-4-integration-audit.md | 100 ++++++++++++++++++
+ tests/run_tests.sh                     | 183 ++++++++++++++++++++++++++++++++-
+ 9 files changed, 492 insertions(+), 29 deletions(-)
+
+--- auto/integrate-session-4 vs auto/integrate-session-1 (full session 1-4 scope) ---
+ .gitattributes                         |   1 +
+ .github/workflows/test.yml             |   2 +
+ README.md                              |   7 +-
+ config/bootstrap-checksums.txt         |  20 ++
+ docs/AUTONOMOUS_AUDIT.md               |  95 ++++++++
+ docs/CLI_CONTRACT.md                   | 162 +++++++++++---
+ pixel-apps-setup.sh                    |  13 ++
+ pixel-autodev.sh                       |  84 +++++--
+ pixel-bootstrap.sh                     |  53 ++++-
+ reports/session-4-integration-audit.md | 100 +++++++++
+ tests/run_tests.sh                     | 388 ++++++++++++++++++++++++++++++++-
+ 11 files changed, 877 insertions(+), 48 deletions(-)
+
+--- whitespace/conflict-marker check ---
+git diff --check: CLEAN

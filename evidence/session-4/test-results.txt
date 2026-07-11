@@ -1,0 +1,40 @@
+Test results — session 4 full suite
+===================================
+Branch/commit under test: auto/document-session-4 @ 94c5303
+(tree identical to auto/integrate-session-4 tip 57bc0f4: the only
+ difference is the --no-ff merge wrapper; no file content differs.
+ Evidence/report files added later are inert to the harness.)
+Command: bash tests/run_tests.sh
+
+Result: passed: 146   failed: 0   skipped: 0
+Duration: ~2m45s (wall clock, this host)
+
+Harness sections (all green):
+  0. required files
+  1. syntax (bash -n on every tracked shell script)
+  2. shellcheck -S warning, including this harness
+  3. --help / unknown-flag contract
+  4. .pixel-lab.json validity
+  5. pixel-autodev.sh dry-run behaviour
+  6. --timeout contract
+  7. CLI contract extras
+  8. clean-clone smoke (fast, hermetic, non-recursive)
+  9. --ssh-port contract (pixel-apps-setup.sh)
+ 10. numeric flag contract (pixel-autodev.sh)
+ 11. --agent enum contract (pixel-autodev.sh)
+ 12. end-of-options + positional arguments (all scripts)
+ 13. tool preflight contract (pixel-autodev.sh)
+ 14. line-ending contract (audit R6)
+ 15. dependency-resolution seam (pixel-autodev.sh preflight)   ← session 4
+ 16. bootstrap checksum manifest lockstep (audit R1)            ← session 4
+ 17. bootstrap download verification, functional (audit R1)     ← session 4
+
+First lines of raw log:
+  == pixel-development test suite ==
+    ok    required file present: pixel-bootstrap.sh
+    ok    required file present: pixel-dev-setup.sh
+Last line of raw log:
+  passed: 146   failed: 0   skipped: 0
+
+Session test-count chain: 44 (pre-session-1) → 124 (session 3) → 133
+(preflight seam, session 4) → 146 (checksum verification, session 4).
