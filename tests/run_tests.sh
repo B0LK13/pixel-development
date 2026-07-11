@@ -817,6 +817,23 @@ if git clone -q --local "$ROOT" "$ckclone" 2>/dev/null \
   t_ok "checksum tool: --check passes from a clean clone"
 else t_fail "tool clean-clone" "clone or check failed"; fi
 
+# --- 21. release-process governance (docs/BOOTSTRAP_RELEASE_PROCESS.md) -----------
+RELDOC="$ROOT/docs/BOOTSTRAP_RELEASE_PROCESS.md"
+rel_row="$(grep -E '^\|.*\| *current *\|' "$RELDOC" 2>/dev/null | head -1)"
+rel_commit="$(printf '%s' "$rel_row" | grep -oE '[0-9a-f]{40}' | head -1)"
+rel_digest="$(printf '%s' "$rel_row" | grep -oE '[0-9a-f]{64}' | head -1)"
+if [ -f "$RELDOC" ] && [ -n "$rel_commit" ] && [ -n "$rel_digest" ] \
+   && [ "$(blob_sha "$rel_commit")" = "$rel_digest" ]; then
+  t_ok "release doc: 'current' pin-history row matches the pinned git object"
+else
+  t_fail "release doc pin history" "commit=$rel_commit digest=$rel_digest blob=$(blob_sha "$rel_commit")"
+fi
+if grep -q 'Rollback procedure' "$RELDOC" && grep -q 'operator-owned' "$RELDOC"; then
+  t_ok "release doc: rollback path + operator-owned publishing documented"
+else
+  t_fail "release doc missing rollback/ownership sections"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
