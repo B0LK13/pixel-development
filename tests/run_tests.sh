@@ -432,6 +432,72 @@ else
   t_fail "git check-attr eol" "got: $attr"
 fi
 
+# --- 15. dependency-resolution seam (pixel-autodev.sh preflight) -------------------
+# Seam: TIMEOUT_BIN / GIT_BIN / CLAUDE_BIN / CODEX_BIN. Set-empty simulates a
+# missing tool hermetically. Every failure must be exit 1, name the tool on
+# stderr, and leave the workspace untouched (no .autodev, no seeded files).
+seam_fail(){ # $1 want-substring  $2 ws-dir  $3.. env-assignments + args
+  local want="$1" w="$2"; shift 2
+  mkdir -p "$w"
+  err="$(env "$@" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ] && case "$err" in *"$want"*) true;; *) false;; esac && [ -z "$(ls -A "$w")" ]; then
+    t_ok "preflight fails closed: $want (exit 1, no state created)"
+  else
+    t_fail "preflight failure: $want" "rc=$rc stderr=$err ws=$(ls -A "$w")"
+  fi
+}
+seam_fail "GNU timeout (coreutils) is required" "$tmp/ws15a" \
+  CLAUDE_BIN="$tmp/bin/claude" TIMEOUT_BIN= bash "$ROOT/pixel-autodev.sh" --workspace="$tmp/ws15a"
+seam_fail "git not installed in devbox" "$tmp/ws15b" \
+  CLAUDE_BIN="$tmp/bin/claude" GIT_BIN= bash "$ROOT/pixel-autodev.sh" --workspace="$tmp/ws15b"
+seam_fail "'claude' not found" "$tmp/ws15c" \
+  CLAUDE_BIN= bash "$ROOT/pixel-autodev.sh" --workspace="$tmp/ws15c"
+seam_fail "'codex' not found" "$tmp/ws15d" \
+  CODEX_BIN= bash "$ROOT/pixel-autodev.sh" --agent=codex --workspace="$tmp/ws15d"
+
+# 15e. CLI validation beats dependency resolution: usage error stays exit 2 even
+#      when every tool is "missing", and still creates nothing.
+mkdir -p "$tmp/ws15e"
+err="$(env TIMEOUT_BIN= GIT_BIN= CLAUDE_BIN= CODEX_BIN= bash "$ROOT/pixel-autodev.sh" --max-tasks=0 --workspace="$tmp/ws15e" 2>&1 >/dev/null)"; rc=$?
+if [ $rc -eq 2 ] && case "$err" in *"--max-tasks"*) true;; *) false;; esac && [ -z "$(ls -A "$tmp/ws15e")" ]; then
+  t_ok "usage error (exit 2) precedes dependency resolution"
+else
+  t_fail "validation ordering" "rc=$rc stderr=$err"
+fi
+
+# 15f. dry-run with BOTH agents "missing" still succeeds (skips resolution)
+out="$(env CLAUDE_BIN= CODEX_BIN= bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$tmp/ws15e" 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"dry-run: skipping agent resolution"*) true;; *) false;; esac; then
+  t_ok "dry-run requires no agent executable even via the seam"
+else
+  t_fail "dry-run seam" "rc=$rc"$'\n'"$out"
+fi
+
+# 15g. path override resolves an explicit executable (timeout via /bin/true)
+out="$(env TIMEOUT_BIN=/bin/true bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$tmp/ws15e" 2>&1)"; rc=$?
+if [ $rc -eq 0 ]; then t_ok "path override resolves (/bin/true as timeout)"; else t_fail "path override" "rc=$rc"$'\n'"$out"; fi
+
+# 15h. bare-name override resolves through PATH and dispatch stays on that stub
+printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/pixel-stub-agent"; chmod +x "$tmp/bin/pixel-stub-agent"
+ws15h="$tmp/ws15h"; mk_ws "$ws15h"
+printf -- '- [ ] Probe bare-name seam resolution\n' > "$ws15h/BACKLOG.md"
+git -C "$ws15h" add -A && git -C "$ws15h" commit -qm task >/dev/null
+out="$(env PATH="$APATH" CLAUDE_BIN=pixel-stub-agent bash "$ROOT/pixel-autodev.sh" --workspace="$ws15h" --max-tasks=1 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"agent: claude ("*"pixel-stub-agent)"*) true;; *) false;; esac; then
+  t_ok "bare-name override resolves through PATH; dispatch runs the stub"
+else
+  t_fail "bare-name override" "rc=$rc"$'\n'"$out"
+fi
+
+# 15i. a metacharacter override value is never executed
+pwn="$tmp/pwned-seam"; rm -f "$pwn"
+env CLAUDE_BIN='$(touch '"$pwn"')' bash "$ROOT/pixel-autodev.sh" --workspace="$tmp/ws15e" >/dev/null 2>&1; rc=$?
+if [ $rc -eq 1 ] && [ ! -e "$pwn" ]; then
+  t_ok "metacharacter seam value is never executed (quoted throughout)"
+else
+  t_fail "seam injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
