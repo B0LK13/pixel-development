@@ -12,13 +12,37 @@ while you sleep.
 ## 1. Quick start
 
 **Prerequisite:** install **Termux** from **F-Droid** (or GitHub releases) — *not*
-the Play Store build, which is unmaintained. Open Termux, then:
+the Play Store build, which is unmaintained. Open Termux, then run the
+**verified install** (fetch → verify → run; never pipe a download into a shell):
 
 ```bash
-# one line — replace `B0LK13` with your GitHub username
-curl -fsSL https://raw.githubusercontent.com/B0LK13/pixel-development/main/pixel-bootstrap.sh \
-  | PIXEL_REPO_BASE=https://raw.githubusercontent.com/B0LK13/pixel-development/main bash
+# 1. Fetch the bootstrap script from an immutable commit URL
+curl -fL -o pixel-bootstrap.sh \
+  "https://raw.githubusercontent.com/B0LK13/pixel-development/c8a5466c31d0a8dc4a461da0d3acc2c7ac487610/pixel-bootstrap.sh"
+
+# 2. Verify it against the pinned SHA-256 (must print: pixel-bootstrap.sh: OK)
+printf '%s  %s\n' \
+  "5bbec677ddfbe5fb853686954743b90637479f26ae1f8487622b4572aa0e6785" \
+  "pixel-bootstrap.sh" | sha256sum -c -
+
+# 3. Run it — pinning the same commit, so the two setup scripts come from the
+#    same immutable ref and match the bootstrap's embedded pins
+PIXEL_REPO_BASE="https://raw.githubusercontent.com/B0LK13/pixel-development/c8a5466c31d0a8dc4a461da0d3acc2c7ac487610" \
+  bash pixel-bootstrap.sh --open-store
 ```
+
+Why the ceremony: the commit-pinned URL is immutable, and the digest proves
+the bytes you run are the bytes that were pinned (see
+[`docs/BOOTSTRAP_TRUST_MODEL.md`](docs/BOOTSTRAP_TRUST_MODEL.md) for the full
+chain). If step 2 prints anything but `pixel-bootstrap.sh: OK`, **do not run
+the script** — delete it. The pinned digest travels with the release notes
+and this README; you can also establish it independently from a clone
+(`git clone … && sha256sum pixel-bootstrap.sh`) — a different channel than the
+raw download. Updates and rollback: every release ships a fresh pin (older
+pins keep working — they install the older, genuine kit); procedure in
+[`docs/BOOTSTRAP_RELEASE_PROCESS.md`](docs/BOOTSTRAP_RELEASE_PROCESS.md).
+Signature verification (once a maintainer key is published):
+`bash scripts/verify-bootstrap-signature.sh --keyring=… --signature=… pixel-bootstrap.sh`.
 
 Prefer to clone?
 
@@ -78,7 +102,7 @@ rootfs. Enter it any time with `devbox`.
 
 **5.1 Install Termux (F-Droid), open it.**
 
-**5.2 Bootstrap.** Run the one-liner (§1) or `bash pixel-bootstrap.sh --open-store`.
+**5.2 Bootstrap.** Run the verified install (§1) or `bash pixel-bootstrap.sh --open-store`.
 Install **Termux:Widget**, then long-press home → Widgets → Termux:Widget → drag it
 on. You now have tappable buttons: `1-Full-Setup … 6-SSH-Info`.
 
@@ -193,7 +217,7 @@ pixel-development/
 └─ .gitignore
 ```
 
-Keep the scripts at the repo **root** so the `curl | bash` raw URLs resolve.
+Keep the scripts at the repo **root** so the raw URLs used by the verified install flow (§1) resolve.
 Run the suite yourself with `bash tests/run_tests.sh` — the autodev runner picks
 the same command up from `.pixel-lab.json` when it works tasks in this repo.
 

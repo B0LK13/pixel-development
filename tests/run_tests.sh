@@ -506,10 +506,11 @@ manifest_sha(){ awk -v n="$1" '$1 ~ /^[0-9a-fA-F]{64}$/ && $2 == n {print tolowe
 embedded_sha(){ grep -A1 -- "$1)" "$ROOT/pixel-bootstrap.sh" | grep -oE '[0-9a-f]{64}' | head -1; }
 file_sha(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | awk '{print $1}'; }
 
-if [ -f "$MANIFEST" ] && manifest_sha pixel-dev-setup.sh >/dev/null && manifest_sha pixel-apps-setup.sh >/dev/null; then
-  t_ok "checksum manifest exists and covers both fetched scripts"
+if [ -f "$MANIFEST" ] && manifest_sha pixel-dev-setup.sh >/dev/null \
+   && manifest_sha pixel-apps-setup.sh >/dev/null && manifest_sha pixel-bootstrap.sh >/dev/null; then
+  t_ok "checksum manifest exists and covers all three pinned artifacts"
 else
-  t_fail "checksum manifest must pin both fetched scripts"
+  t_fail "checksum manifest must pin all three artifacts (dev-setup, apps-setup, bootstrap)"
 fi
 for s in pixel-dev-setup.sh pixel-apps-setup.sh; do
   if [ "$(manifest_sha "$s")" = "$(file_sha "$ROOT/$s")" ]; then
@@ -523,6 +524,13 @@ for s in pixel-dev-setup.sh pixel-apps-setup.sh; do
     t_fail "embedded digest out of sync: $s" "embedded=$(embedded_sha "$s") manifest=$(manifest_sha "$s")"
   fi
 done
+# The anchor is pinned too, but carries no embedded copy of its own digest —
+# a script cannot hash itself. Two-way check only.
+if [ "$(manifest_sha pixel-bootstrap.sh)" = "$(file_sha "$ROOT/pixel-bootstrap.sh")" ]; then
+  t_ok "manifest pin matches repo content: pixel-bootstrap.sh (anchor lockstep)"
+else
+  t_fail "manifest out of sync with pixel-bootstrap.sh" "manifest=$(manifest_sha pixel-bootstrap.sh) file=$(file_sha "$ROOT/pixel-bootstrap.sh")"
+fi
 # The R1-scoped downloads never pipe remote content into a shell. The only
 # piped installer left in the file is the chartered claude.ai updater inside
 # the quoted 5-Update-AI shortcut body (audit F8 — out of scope here).
@@ -611,6 +619,96 @@ if [ $rc -eq 1 ] && [ ! -e "$pwn" ]; then
   t_ok "metacharacter repo-base value is never executed"
 else
   t_fail "repo-base injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"
+fi
+
+# --- 18. bootstrap anchor install-flow contract (README §1) ---------------------
+# The primary documented install path must be fetch→verify→run from an
+# immutable commit URL, with a digest that really is the digest of the pinned
+# git object, and no pipe-to-shell anywhere in the primary block.
+readme_block="$(awk '/^## 1\./{f=1} f&&/^```bash/{c=1;next} c&&/^```/{exit} c{print}' "$ROOT/README.md")"
+pin_commit="$(printf '%s\n' "$readme_block" | grep -oE 'raw\.githubusercontent\.com/B0LK13/pixel-development/[0-9a-f]{40}/pixel-bootstrap\.sh' | head -1 | grep -oE '[0-9a-f]{40}')"
+pin_digest="$(printf '%s\n' "$readme_block" | grep -oE '[0-9a-f]{64}' | head -1)"
+blob_sha(){ git -C "$ROOT" show "$1:pixel-bootstrap.sh" 2>/dev/null | (sha256sum 2>/dev/null || shasum -a 256) | awk '{print $1}'; }
+[ "${#pin_commit}" -eq 40 ] || pin_commit=
+[ "${#pin_digest}" -eq 64 ] || pin_digest=
+if [ -n "$pin_commit" ] && [ -n "$pin_digest" ]; then
+  t_ok "README §1 pins a full-commit URL and a SHA-256"
+else
+  t_fail "README §1 pin shape" "commit=$pin_commit digest=$pin_digest"
+fi
+if [ -n "$pin_commit" ] && [ "$(blob_sha "$pin_commit")" = "$pin_digest" ]; then
+  t_ok "README pin digest == sha256 of the pinned git object"
+else
+  t_fail "README pin does not match the pinned commit" "blob=$(blob_sha "$pin_commit") readme=$pin_digest"
+fi
+if printf '%s\n' "$readme_block" | grep -qE '\|[[:space:]]*(bash|sh)\b'; then
+  t_fail "README §1 primary block still pipes a download into a shell"
+else
+  t_ok "README §1 primary block has no pipe-to-shell"
+fi
+if printf '%s\n' "$readme_block" | grep -q "PIXEL_REPO_BASE=\"https://raw.githubusercontent.com/B0LK13/pixel-development/$pin_commit\""; then
+  t_ok "PIXEL_REPO_BASE pins the same immutable commit"
+else
+  t_fail "PIXEL_REPO_BASE does not pin the same commit as the download"
+fi
+
+# --- 19. signature verification fixtures (bootstrap trust model, tier 2) --------
+HELPER="$ROOT/scripts/verify-bootstrap-signature.sh"
+if command -v gpg >/dev/null 2>&1 && command -v gpgv >/dev/null 2>&1; then
+  GNUPGHOME="$tmp/gnupg"; export GNUPGHOME; mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
+  printf 'Key-Type: eddsa\nKey-Curve: ed25519\nKey-Usage: sign\nName-Real: Pixel Test\nName-Email: t@example.invalid\n%%no-protection\n%%commit\n' > "$tmp/keyparams"
+  gpg --batch --gen-key "$tmp/keyparams" >/dev/null 2>&1
+  printf 'genuine bootstrap artifact\n' > "$tmp/artifact"
+  gpg --batch --yes --local-user t@example.invalid --detach-sign --output "$tmp/artifact.sig" "$tmp/artifact" >/dev/null 2>&1
+  gpg --export t@example.invalid > "$tmp/trusted.pub" 2>/dev/null
+  # a second, untrusted key for the wrong-keyring case
+  printf 'Key-Type: eddsa\nKey-Curve: ed25519\nKey-Usage: sign\nName-Real: Other\nName-Email: o@example.invalid\n%%no-protection\n%%commit\n' > "$tmp/keyparams2"
+  gpg --batch --gen-key "$tmp/keyparams2" >/dev/null 2>&1
+  gpg --export o@example.invalid > "$tmp/untrusted.pub" 2>/dev/null
+
+  # 19a. a genuine signature verifies
+  out="$(bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact" 2>&1)"; rc=$?
+  if [ $rc -eq 0 ] && case "$out" in *"signature verified"*) true;; *) false;; esac; then
+    t_ok "valid detached signature verifies (gpgv)"
+  else t_fail "valid signature" "rc=$rc"$'\n'"$out"; fi
+
+  # 19b. a tampered artifact fails closed
+  cp "$tmp/artifact" "$tmp/artifact-tampered"; printf 'x\n' >> "$tmp/artifact-tampered"
+  err="$(bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact-tampered" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ] && case "$err" in *"FAILED"*) true;; *) false;; esac; then
+    t_ok "tampered artifact fails signature verification (exit 1)"
+  else t_fail "tampered artifact" "rc=$rc"$'\n'"$err"; fi
+
+  # 19c. the right signature under the wrong keyring fails
+  err="$(bash "$HELPER" --keyring="$tmp/untrusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ]; then t_ok "untrusted keyring rejects a genuine signature"; else t_fail "wrong keyring" "rc=$rc"$'\n'"$err"; fi
+
+  # 19d. missing signature file is a clear error
+  err="$(bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/nope.sig" "$tmp/artifact" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ] && case "$err" in *"signature not found"*) true;; *) false;; esac; then
+    t_ok "missing signature file is a clear error"
+  else t_fail "missing signature" "rc=$rc"$'\n'"$err"; fi
+
+  # 19e. missing verifier (seam set-empty) fails clearly
+  err="$(env GPGV_BIN= bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ] && case "$err" in *gpgv*) true;; *) false;; esac; then
+    t_ok "missing gpgv fails with a named dependency (exit 1)"
+  else t_fail "missing verifier" "rc=$rc"$'\n'"$err"; fi
+
+  # 19f. usage errors exit 2 and precede dependency resolution
+  bash "$HELPER" >/dev/null 2>&1; rc=$?
+  [ $rc -eq 2 ] && t_ok "signature helper: no args is a usage error (exit 2)" || t_fail "helper usage" "rc=$rc"
+  bash "$HELPER" --bogus=1 >/dev/null 2>&1; rc=$?
+  [ $rc -eq 2 ] && t_ok "signature helper: unknown flag is a usage error (exit 2)" || t_fail "helper unknown flag" "rc=$rc"
+
+  # 19g. a metacharacter verifier value is never executed
+  pwn="$tmp/pwned-gpgv"; rm -f "$pwn"
+  env GPGV_BIN='$(touch '"$pwn"')' bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact" >/dev/null 2>&1; rc=$?
+  if [ $rc -eq 1 ] && [ ! -e "$pwn" ]; then
+    t_ok "metacharacter GPGV_BIN value is never executed"
+  else t_fail "gpgv seam injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"; fi
+else
+  t_skip "gpg/gpgv not installed — signature fixtures skipped (install gnupg to run)"
 fi
 
 # --- summary ---------------------------------------------------------------------
