@@ -251,6 +251,9 @@ and `auto/*` and on every pull request — local tests only, `contents: read`,
 - `pixel-bootstrap.sh` verifies network-fetched setup scripts against pinned SHA-256 digests before installing them (fail closed on mismatch); pins live in `config/bootstrap-checksums.txt`.
 - Full flag contract: [`docs/CLI_CONTRACT.md`](docs/CLI_CONTRACT.md).
   Security + portability audit: [`docs/AUTONOMOUS_AUDIT.md`](docs/AUTONOMOUS_AUDIT.md).
+  Release signing: [`docs/RELEASE_SIGNING.md`](docs/RELEASE_SIGNING.md);
+  key lifecycle: [`docs/SIGNING_KEY_LIFECYCLE.md`](docs/SIGNING_KEY_LIFECYCLE.md);
+  remote CI runbook: [`docs/REMOTE_CI_VERIFICATION.md`](docs/REMOTE_CI_VERIFICATION.md).
 
 ---
 
