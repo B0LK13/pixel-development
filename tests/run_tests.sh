@@ -883,6 +883,27 @@ if grep -q 'exit "$2"' "$CIL" && grep -q 'cd "$ROOT"' "$CIL"; then
   t_ok "ci-local.sh preserves failing step exit status and cds to repo root"
 else t_fail "ci-local.sh shape" "fail-fast/root handling regressed"; fi
 
+# release-candidate-check job: fixture build + both verify paths +
+# reproducibility, bounded, publishing nothing; every release mechanism it
+# uses must also be covered by the hermetic harness (ci-local gate 5).
+if grep -q '^  release-candidate-check:' "$WF" && grep -q 'timeout-minutes: 5' "$WF"; then
+  t_ok "workflow: release-candidate-check job exists with a bounded timeout"
+else t_fail "workflow release job" "missing or unbounded"; fi
+for mech in 'SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh' 'bash scripts/verify-release-bundle.sh' '--require-signature' 'diff -r'; do
+  if grep -qF -- "$mech" "$WF"; then
+    t_ok "workflow release job exercises: $mech"
+  else t_fail "workflow release job" "missing: $mech"; fi
+done
+if grep -qF 'scripts/build-release-candidate.sh' "$ROOT/tests/run_tests.sh" \
+   && grep -qF 'scripts/verify-release-bundle.sh' "$ROOT/tests/run_tests.sh"; then
+  t_ok "CI parity: release mechanisms also covered by the hermetic suite (ci-local gate 5)"
+else t_fail "CI parity release" "harness lost release coverage"; fi
+if grep -qiE 'gh release|git push|create-release|action-gh-release' "$WF"; then
+  t_fail "workflow publishes or pushes" "release/push step found"
+else
+  t_ok "workflow release job publishes nothing and pushes nothing"
+fi
+
 # --- 23. session-5 security invariants (bootstrap trust + lifecycle) --------------
 # 23a. SIGTERM mid-download exits through the EXIT trap, so the temp dir is
 #      removed (invariant 9). A stub curl sleeps; only the bootstrap PID is
