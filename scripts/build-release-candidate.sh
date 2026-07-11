@@ -49,6 +49,11 @@ if [ "${die2:-0}" = 1 ] || ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "build-release-candidate: malformed version: $VERSION (want strict SemVer X.Y.Z, e.g. 1.0.0)" >&2
   exit 2
 fi
+# environment input validation, before any side effect
+if [ -n "${SOURCE_DATE_EPOCH:-}" ] && ! [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]]; then
+  echo "build-release-candidate: SOURCE_DATE_EPOCH must be unix seconds: $SOURCE_DATE_EPOCH" >&2
+  exit 1
+fi
 
 # --- resolve the repository root (this script lives in <root>/scripts/) ------
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)" \
@@ -136,9 +141,8 @@ while [ "$i" -lt "${#ART_PATHS[@]}" ]; do
   i=$((i+1))
 done
 
-# created_at: SOURCE_DATE_EPOCH (reproducible builds) or now.
+# created_at: SOURCE_DATE_EPOCH (reproducible builds, validated above) or now.
 if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
-  [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] || die "SOURCE_DATE_EPOCH must be unix seconds: $SOURCE_DATE_EPOCH"
   CREATED_AT="$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" \
     || die "date cannot format SOURCE_DATE_EPOCH (needs GNU-compatible date -d)"
 else

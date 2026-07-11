@@ -103,7 +103,42 @@ should not be used.)
    is needed. If the rollback is due to a bad release, mark that row
    `unsupported` in the next docs commit.
 
-## 6. What this session did NOT do
+## 6. Archive handling
+
+**Decision: the canonical release artifact is the bundle *directory*.** Core
+tooling (`scripts/build-release-candidate.sh`) produces the directory only;
+archives are derived conveniences created by the operator or CI, never a
+release gate.
+
+Rationale:
+
+- A directory verifies directly with `scripts/verify-release-bundle.sh`; an
+  archive adds an extract step whose safety (path traversal, symlink
+  entries) would also need verification.
+- Deterministic `.tar.gz` needs GNU flags (`--sort=name`, `--owner=0`,
+  `--group=0`, `--numeric-owner`, `--mtime`). All three supported
+  environments ship GNU tar (Termux `tar` package, proot Ubuntu,
+  `ubuntu-latest`), but the kit's rule is to not *assume* GNU-only behavior
+  without a fallback — so archiving is documented, not gated.
+- `.zip` is non-deterministic by default (entry order, per-entry timestamps)
+  and is not produced.
+
+Operator/CI command (deterministic; use the epoch recorded at build time):
+
+```bash
+SOURCE_DATE_EPOCH=<unix-timestamp>
+tar --sort=name --owner=0 --group=0 --numeric-owner \
+    --mtime="@${SOURCE_DATE_EPOCH}" \
+    -czf pixel-development-<version>.tar.gz \
+    pixel-development-<version>
+```
+
+If `tar --sort=name` is unsupported on a host, the directory bundle remains
+fully valid — ship the directory or archive from a host with GNU tar.
+Directory-bundle reproducibility is proven by harness §27 and
+`evidence/session-6/reproducibility.txt`.
+
+## 7. What this session did NOT do
 
 No tag was created, no release was published, no signing key was provisioned,
 and nothing was pushed. The pin history above is seeded from the verified
