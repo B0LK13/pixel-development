@@ -950,11 +950,18 @@ fi
 mk_rc_clone(){ # $1 = destination clone dir
   local dst="$1"
   git clone -q "$ROOT" "$dst" 2>/dev/null || return 1
-  cp "$ROOT/scripts/build-release-candidate.sh" "$dst/scripts/"
+  cp "$ROOT/scripts/build-release-candidate.sh" "$dst/scripts/" || return 1
   git -C "$dst" config user.name t; git -C "$dst" config user.email t@t
   # fixtures never sign: the host's global commit.gpgsign must not leak in
   git -C "$dst" config commit.gpgsign false
-  git -C "$dst" add -A && git -C "$dst" commit -qm fixture >/dev/null
+  git -C "$dst" add -A || return 1
+  # commit only if the copy changed the tree: when the builder is already
+  # committed upstream the clone is identical and there is nothing to commit
+  if ! git -C "$dst" diff --cached --quiet; then
+    git -C "$dst" commit -qm fixture >/dev/null || return 1
+  fi
+  # the fixture must end up clean — the builder's clean-tree gate depends on it
+  [ -z "$(git -C "$dst" status --porcelain)" ]
 }
 rcrun(){ # $1 = clone dir; rest = builder args → sets rc + rcout (no pipe)
   local d="$1"; shift
