@@ -214,6 +214,54 @@ if [ $rc -eq 2 ]; then t_ok "bootstrap bare '--repo-base' rejected with exit 2";
 bash "$ROOT/pixel-bootstrap.sh" -- >/dev/null 2>&1; rc=$?
 if [ $rc -eq 2 ]; then t_ok "bootstrap '--' currently rejected as unknown flag"; else t_fail "'--' handling" "rc=$rc (want 2)"; fi
 
+# --- 9. --ssh-port contract (pixel-apps-setup.sh) --------------------------------
+# Throwaway HOME (with a space): any side effect (the log file) becomes
+# observable. Valid ports pass validation and reach the Termux preflight,
+# which exits 1 outside Termux — that distinguishes "accepted" from exit 2.
+apps_home="$tmp/apps home"; mkdir -p "$apps_home"
+run_apps(){ env HOME="$apps_home" bash "$ROOT/pixel-apps-setup.sh" "$@"; }
+
+# 9a. invalid ports: exit 2, flag named on stderr, nothing on stdout.
+#     Decided contract: empty / non-numeric / signed / zero / >65535 / >5 digits
+#     / whitespace / shell metacharacters are all usage errors.
+for bad in "--ssh-port=0" "--ssh-port=65536" "--ssh-port=-1" "--ssh-port=abc" \
+           "--ssh-port=" "--ssh-port=22x" "--ssh-port= 22" "--ssh-port=22;reboot" \
+           "--ssh-port=+22" "--ssh-port=99999" "--ssh-port=100000"; do
+  out="$(run_apps "$bad" 2>"$tmp/err")"; rc=$?; err="$(cat "$tmp/err")"
+  if [ $rc -eq 2 ] && [ -z "$out" ] && case "$err" in *"--ssh-port"*) true;; *) false;; esac; then
+    t_ok "rejects invalid $bad (exit 2, stderr names flag)"
+  else
+    t_fail "invalid $bad" "rc=$rc stdout=$out stderr=$err"
+  fi
+done
+if [ ! -f "$apps_home/pixel-apps-setup.log" ]; then
+  t_ok "invalid ports create no log file (validation precedes side effects)"
+else
+  t_fail "invalid ports must not create the log file"
+fi
+
+# 9b. valid ports pass validation and reach the Termux preflight (exit 1 here).
+#     Decided contract: leading zeros are tolerated (08022/008022 == 8022),
+#     same convention as --timeout.
+for good in "--ssh-port=1" "--ssh-port=22" "--ssh-port=65535" "--ssh-port=8022" \
+            "--ssh-port=08022" "--ssh-port=008022"; do
+  out="$(run_apps "$good" 2>&1)"; rc=$?
+  if [ $rc -eq 1 ] && case "$out" in *"Run inside Termux"*) true;; *) false;; esac; then
+    t_ok "accepts $good (validation passed, reached preflight)"
+  else
+    t_fail "valid $good" "rc=$rc"$'\n'"$out"
+  fi
+done
+
+# 9c. duplicate flags: parser semantics are last-wins (documented). The FINAL
+#     value is what gets validated — an earlier bad value is overwritten.
+out="$(run_apps --ssh-port=1000 --ssh-port=2000 2>&1)"; rc=$?
+if [ $rc -eq 1 ]; then t_ok "duplicate --ssh-port accepted (last-wins, documented)"; else t_fail "duplicate --ssh-port" "rc=$rc"; fi
+out="$(run_apps --ssh-port=abc --ssh-port=2000 2>&1)"; rc=$?
+if [ $rc -eq 1 ]; then t_ok "duplicate --ssh-port: later valid overrides earlier invalid"; else t_fail "duplicate ssh-port valid-last" "rc=$rc"; fi
+err="$(run_apps --ssh-port=2000 --ssh-port=abc 2>&1 >/dev/null)"; rc=$?
+if [ $rc -eq 2 ]; then t_ok "duplicate --ssh-port: later invalid rejected (last-wins validated)"; else t_fail "duplicate ssh-port invalid-last" "rc=$rc"; fi
+
 # --- 8. clean-clone smoke (fast, hermetic, non-recursive) -------------------------
 if [ "${PIXEL_TESTS_NO_CLONE:-0}" = 1 ]; then
   t_skip "clean-clone smoke (nested run)"
