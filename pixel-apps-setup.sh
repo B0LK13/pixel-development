@@ -37,6 +37,19 @@ for arg in "$@"; do
   esac
 done
 
+# Validate --ssh-port before any side effect (log file, preflight): it must be
+# an integer in 1–65535. Leading zeros are tolerated and canonicalised
+# (08022 → 8022), the same convention as pixel-autodev.sh's --timeout.
+bad_port(){ echo "pixel-apps-setup: --ssh-port must be an integer between 1 and 65535 (got '$1')" >&2; exit 2; }
+case "$SSH_PORT" in
+  ''|*[!0-9]*) bad_port "$SSH_PORT" ;;
+esac
+SSH_PORT="${SSH_PORT#"${SSH_PORT%%[!0]*}"}"   # strip leading zeros (pure string op — no arithmetic)
+[ -n "$SSH_PORT" ] || SSH_PORT=0              # "0"/"000…" collapses to 0, rejected below
+if [ "${#SSH_PORT}" -gt 5 ] || [ "$SSH_PORT" -lt 1 ] || [ "$SSH_PORT" -gt 65535 ]; then
+  bad_port "$SSH_PORT"
+fi
+
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_R=$'\033[0m'; C_B=$'\033[1m'; C_DIM=$'\033[2m'
   RED=$'\033[38;5;203m'; BLU=$'\033[38;5;39m'; GRN=$'\033[38;5;42m'; YLW=$'\033[38;5;221m'
