@@ -18,5 +18,5 @@ Notes:
 
 Last lines of the clone run log:
     ok    metacharacter repo-base value is never executed
-  
+
   passed: 146   failed: 0   skipped: 0

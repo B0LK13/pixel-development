@@ -1,66 +1,68 @@
-Commit graph — session 4 (generated on auto/session-4-evidence)
-============================================================
+Commit graph — session 4 (generated on auto/session-4-evidence, final)
+=====================================================================
 
---- main..auto/integrate-session-4 (session 4 commits on top of main 711c23b) ---
+--- main..auto/session-4-evidence (all session 4 commits on top of main 711c23b) ---
+* e02ada6 chore: record final session 4 status
+* c44636b docs: add session 4 evidence and final report
 *   57bc0f4 Merge branch 'auto/document-session-4' into auto/integrate-session-4
-|\  
+|\
 | * 94c5303 docs: document bootstrap trust and CLI dependency contracts
-|/  
+|/
 *   a50f4b1 Merge branch 'auto/ci-explicit-gates' into auto/integrate-session-4
-|\  
+|\
 | * ed2335c ci: add explicit whitespace/conflict-marker gate
-|/  
+|/
 *   29bff2b Merge branch 'auto/bootstrap-checksum-verify' into auto/integrate-session-4
-|\  
+|\
 | * 763cc4d test: cover checksum and download failure paths
 | * 104397e security: verify bootstrap downloads with pinned checksums
-|/  
+|/
 *   67d6980 Merge branch 'auto/preflight-test-seam' into auto/integrate-session-4
-|\  
+|\
 | * 01d4ed3 test: add hermetic dependency preflight coverage
 | * 102b24b refactor: centralize required tool resolution
-|/  
+|/
 * 8b8c1ab Merge branch 'auto/session-4-audit' into auto/integrate-session-4
 * 857543d docs: add session 4 integration audit
 
 --- full decorated graph (top 40) ---
-*   57bc0f4 (HEAD -> auto/session-4-evidence, auto/integrate-session-4) Merge branch 'auto/document-session-4' into auto/integrate-session-4
-|\  
+* e02ada6 (HEAD -> auto/session-4-evidence) chore: record final session 4 status
+* c44636b docs: add session 4 evidence and final report
+*   57bc0f4 (auto/integrate-session-4) Merge branch 'auto/document-session-4' into auto/integrate-session-4
+|\
 | * 94c5303 (auto/document-session-4) docs: document bootstrap trust and CLI dependency contracts
-|/  
+|/
 *   a50f4b1 Merge branch 'auto/ci-explicit-gates' into auto/integrate-session-4
-|\  
+|\
 | * ed2335c (auto/ci-explicit-gates) ci: add explicit whitespace/conflict-marker gate
-|/  
+|/
 *   29bff2b Merge branch 'auto/bootstrap-checksum-verify' into auto/integrate-session-4
-|\  
+|\
 | * 763cc4d (auto/bootstrap-checksum-verify) test: cover checksum and download failure paths
 | * 104397e security: verify bootstrap downloads with pinned checksums
-|/  
+|/
 *   67d6980 Merge branch 'auto/preflight-test-seam' into auto/integrate-session-4
-|\  
+|\
 | * 01d4ed3 (auto/preflight-test-seam) test: add hermetic dependency preflight coverage
 | * 102b24b refactor: centralize required tool resolution
-|/  
+|/
 *   8b8c1ab Merge branch 'auto/session-4-audit' into auto/integrate-session-4
-|\  
+|\
 | * 857543d (auto/session-4-audit) docs: add session 4 integration audit
-|/  
+|/
 *   711c23b (main) chore: integrate session 3 into canonical branch
-|\  
+|\
 | *   79617f4 (auto/integrate-session-3) Merge branch 'auto/update-cli-contract' into auto/integrate-session-3
-| |\  
+| |\
 | | * bdba2b6 (auto/update-cli-contract) docs: update cli validation contract
-| |/  
+| |/
 | *   c2827fd Merge branch 'auto/add-gitattributes' into auto/integrate-session-3
-| |\  
+| |\
 | | * e7072d0 (auto/add-gitattributes) chore: pin LF line endings via .gitattributes
-| |/  
+| |/
 | *   640ce16 Merge branch 'auto/improve-tool-preflight' into auto/integrate-session-3
-| |\  
+| |\
 | | * c49d854 (auto/improve-tool-preflight) fix: clear timeout dependency check; dry-run skips agent resolution
-| |/  
+| |/
 | *   97dc249 Merge branch 'auto/harden-end-of-options' into auto/integrate-session-3
-| |\  
-| | * 5fe0c70 (auto/harden-end-of-options) test: pin end-of-options and positional rejection across scripts
-| |/  
+| |\
