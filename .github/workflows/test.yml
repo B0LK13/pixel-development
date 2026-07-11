@@ -28,5 +28,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install shellcheck
         run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      - name: Whitespace / conflict-marker gate
+        run: git diff --check
       - name: Run verification suite
         run: bash tests/run_tests.sh
