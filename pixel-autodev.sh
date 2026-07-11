@@ -26,6 +26,10 @@ BUDGET="2.00"
 TIMEOUT=1200        # per-agent-call wall-clock limit (seconds)
 MODEL="sonnet"
 AGENT="claude"
+# Agent binary override seam — lets tests inject a stub agent without touching
+# PATH (defaults resolve to the real installed agents; no behavior change).
+CLAUDE_BIN="${CLAUDE_BIN:-claude}"
+CODEX_BIN="${CODEX_BIN:-codex}"
 PMODE="dontAsk"     # CI-safe: no prompts, honors allow/deny lists
 PUSH=0; DRY=0
 CHARTER="PIXEL_AGENT.md"
@@ -47,6 +51,13 @@ for a in "$@"; do case "$a" in
   *) echo "Unknown flag: $a (try --help)"; exit 2 ;;
 esac; done
 [ -z "$BACKLOG" ] && BACKLOG="$WORKSPACE/BACKLOG.md"
+
+# Validate --timeout before any environment checks: positive integer only
+# (rejects empty, non-numeric, negative, and zero — a usage error, exit 2).
+case "$TIMEOUT" in
+  ''|*[!0-9]*) echo "pixel-autodev: --timeout must be a positive integer (got '$TIMEOUT')" >&2; exit 2 ;;
+esac
+[ "$TIMEOUT" -gt 0 ] || { echo "pixel-autodev: --timeout must be a positive integer (got '$TIMEOUT')" >&2; exit 2; }
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_R=$'\033[0m'; C_B=$'\033[1m'; C_DIM=$'\033[2m'
@@ -202,9 +213,9 @@ agent_run(){ # $1 repo_dir  $2 prompt_file
   local deny="Bash(git push *),Bash(git commit *),Bash(git reset *),Bash(git checkout *),Bash(rm -rf *),Bash(sudo *),Bash(curl * | *),WebFetch"
   ( cd "$dir" || exit 90
     if [ "$AGENT" = "codex" ]; then
-      timeout "$TIMEOUT" codex exec --full-auto "$(cat "$pf")" 2>&1
+      timeout "$TIMEOUT" "$CODEX_BIN" exec --full-auto "$(cat "$pf")" 2>&1
     else
-      timeout "$TIMEOUT" claude -p "$(cat "$pf")" \
+      timeout "$TIMEOUT" "$CLAUDE_BIN" -p "$(cat "$pf")" \
         --output-format json --model "$MODEL" \
         --permission-mode "$PMODE" \
         --allowedTools "$allow" --disallowedTools "$deny" \
@@ -254,9 +265,15 @@ EOF
   rec "- summary: ${summary:0:600}"
 
   if [ $rc -ne 0 ]; then
-    warn "agent errored (rc=$rc) — reverting branch"
+    if [ $rc -eq 124 ]; then
+      warn "agent timed out after ${TIMEOUT}s (rc=124) — reverting branch"
+      rec "- RESULT: FAILED (timeout after ${TIMEOUT}s)"
+    else
+      warn "agent errored (rc=$rc) — reverting branch"
+      rec "- RESULT: FAILED (agent)"
+    fi
     ( cd "$dir" && git checkout -- . 2>/dev/null; git switch "$base" 2>/dev/null; git branch -D "auto/$slug" 2>/dev/null )
-    rec "- RESULT: FAILED (agent)"; return 1
+    return 1
   fi
 
   if [ -z "$(cd "$dir" && git status --porcelain)" ]; then
