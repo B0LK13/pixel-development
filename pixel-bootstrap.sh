@@ -42,6 +42,37 @@ die(){  printf '\n%s✖ %s%s\n' "$RED" "$*" "$C_R" >&2; exit 1; }
 have(){ command -v "$1" >/dev/null 2>&1; }
 
 # ---------------------------------------------------------------------------
+# Download verification (session 4, audit R1)
+# Scripts fetched over the network are downloaded to a temp file and verified
+# against pinned SHA-256 digests BEFORE installation — remote content never
+# reaches $DEST unverified, and is never piped to a shell. Local/cached copies
+# are operator-trusted and skip verification. Source of truth for the pins:
+# config/bootstrap-checksums.txt (sync enforced by harness §16; update
+# procedure in docs/CLI_CONTRACT.md §8).
+# ---------------------------------------------------------------------------
+DLTMP="$(mktemp -d "${TMPDIR:-/tmp}/pixel-dl.XXXXXX")"
+trap 'rm -rf "$DLTMP"' EXIT
+
+expected_sha256(){ # $1 script name → prints pinned sha256; rc 1 if no entry
+  if [ -n "${PIXEL_BOOTSTRAP_CHECKSUM_FILE:-}" ]; then   # test/maintenance seam
+    awk -v n="$1" '$1 ~ /^[0-9a-fA-F]{64}$/ && $2 == n {print tolower($1); f=1} END{exit !f}' \
+      "$PIXEL_BOOTSTRAP_CHECKSUM_FILE" 2>/dev/null
+    return
+  fi
+  case "$1" in
+    pixel-dev-setup.sh)  printf '%s\n' 'bc9b49fa953ae5511fd576180f83e00f350788b6f5d3cab295a649ede14a292f' ;;
+    pixel-apps-setup.sh) printf '%s\n' '844d81db780f9ffec8f7d49388f9261429d34d826737ea2abbe533b7892eb619' ;;
+    *) return 1 ;;
+  esac
+}
+
+sha256_of(){ # $1 file → prints sha256; rc 1 if no hash tool
+  if have sha256sum; then sha256sum "$1" | awk '{print $1}'
+  elif have shasum; then shasum -a 256 "$1" | awk '{print $1}'
+  else return 1; fi
+}
+
+# ---------------------------------------------------------------------------
 # 1. Preflight
 # ---------------------------------------------------------------------------
 [ -n "${PREFIX:-}" ] && have pkg || die "Run inside Termux (F-Droid build)."
@@ -62,11 +93,25 @@ for s in $SETUP_SCRIPTS; do
   done
   if [ -n "$found" ]; then
     cp "$found" "$DEST/$s" && ok "$s (copied from ${found%/*})"
-  elif curl -fsSL -o "$DEST/$s" "$REPO_BASE/$s" 2>/dev/null; then
-    ok "$s (downloaded)"
   else
-    warn "$s not found locally and download failed."
-    info "Put it next to this script, or set --repo-base=<URL where it's hosted>."
+    # Network path — fail closed: nothing is installed unless it downloads
+    # whole AND matches the pinned digest. On failure the run stops here;
+    # the EXIT trap removes the temp file, so no partial content survives.
+    exp="$(expected_sha256 "$s")" \
+      || die "no pinned checksum for $s — refusing to fetch unverified content (see config/bootstrap-checksums.txt)"
+    have sha256sum || have shasum \
+      || die "no SHA-256 tool (sha256sum or shasum) — cannot verify $s; refusing to install it"
+    if curl -fsSL -o "$DLTMP/$s" "$REPO_BASE/$s" 2>/dev/null; then
+      got="$(sha256_of "$DLTMP/$s")"
+      if [ "$got" = "$exp" ]; then
+        mv "$DLTMP/$s" "$DEST/$s"; ok "$s (downloaded, sha256 verified)"
+      else
+        die "checksum mismatch for $s — expected $exp, got ${got:-<unreadable>}; NOT installed (source may be tampered, or the pin is stale)"
+      fi
+    else
+      rm -f "$DLTMP/$s"
+      die "could not download $s from $REPO_BASE — nothing installed. Put it next to this script, or fix --repo-base."
+    fi
   fi
   chmod +x "$DEST/$s" 2>/dev/null || true
 done
