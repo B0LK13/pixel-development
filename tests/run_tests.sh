@@ -1350,6 +1350,59 @@ else
   t_skip "gpg/gpgv not installed — signed bundle fixtures skipped (install gnupg to run)"
 fi
 
+# --- 27. release reproducibility (SOURCE_DATE_EPOCH) ----------------------------
+# Two independent builds from the same commit must be byte-identical when
+# SOURCE_DATE_EPOCH is pinned; a different epoch may change only created_at
+# (and the signing manifest's digest bound to it).
+tree_listing(){ (cd "$1" && find . -type f -exec stat -c '%a %Y %n' {} + 2>/dev/null | sort -k3); }
+tree_hashes(){ (cd "$1" && find . -type f -exec sha256sum {} + | sort -k2); }
+repro_build(){ # $1 = output parent, $2 = SOURCE_DATE_EPOCH (empty = unset)
+  if [ -n "$2" ]; then
+    SOURCE_DATE_EPOCH="$2" bash "$tmp/repro/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$1" >/dev/null 2>&1
+  else
+    bash "$tmp/repro/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$1" >/dev/null 2>&1
+  fi
+}
+
+if mk_rc_clone "$tmp/repro/repo"; then
+  # 27a. same commit + same epoch → byte-identical (content, modes, mtimes)
+  repro_build "$tmp/repro/a" 1700000000; repro_build "$tmp/repro/b" 1700000000
+  ba="$tmp/repro/a/pixel-development-1.0.0"; bb="$tmp/repro/b/pixel-development-1.0.0"
+  if [ -d "$ba" ] && [ -d "$bb" ] \
+     && diff -r "$ba" "$bb" >/dev/null 2>&1 \
+     && [ "$(tree_listing "$ba")" = "$(tree_listing "$bb")" ] \
+     && [ "$(tree_hashes "$ba")" = "$(tree_hashes "$bb")" ]; then
+    t_ok "reproducibility: two SDE-pinned builds are byte-identical (content, modes, mtimes)"
+  else
+    t_fail "reproducibility SDE-pinned" "$(diff -r "$ba" "$bb" 2>&1 | head -5)"
+  fi
+
+  # 27b. different epoch → only metadata/manifest content may change
+  repro_build "$tmp/repro/c" 1700000000; repro_build "$tmp/repro/d" 1700000001
+  bc="$tmp/repro/c/pixel-development-1.0.0"; bd="$tmp/repro/d/pixel-development-1.0.0"
+  if [ -d "$bc" ] && [ -d "$bd" ]; then
+    h1="$(tree_hashes "$bc" | grep -v 'RELEASE-METADATA.json\|SIGNING-MANIFEST.json')"
+    h2="$(tree_hashes "$bd" | grep -v 'RELEASE-METADATA.json\|SIGNING-MANIFEST.json')"
+    if [ "$h1" = "$h2" ]; then
+      t_ok "reproducibility: different SDE changes only metadata+manifest (payload stable)"
+    else
+      t_fail "reproducibility different-SDE" "payload files changed between epochs"
+    fi
+  else
+    t_fail "reproducibility different-SDE" "build failed"
+  fi
+
+  # 27c. non-numeric epoch → clear failure, no bundle (no shell arithmetic edge)
+  rcout="$(SOURCE_DATE_EPOCH=notanumber bash "$tmp/repro/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$tmp/repro/e" 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ] && [ ! -e "$tmp/repro/e" ] && printf '%s' "$rcout" | grep -q 'SOURCE_DATE_EPOCH'; then
+    t_ok "reproducibility: non-numeric SOURCE_DATE_EPOCH rejected (exit 1, no bundle)"
+  else
+    t_fail "reproducibility bad SDE" "rc=$rc $rcout"
+  fi
+else
+  t_fail "reproducibility fixtures" "clone failed"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
