@@ -1,0 +1,230 @@
+Session 5 CI parity evidence
+Generated: 2026-07-11T15:44:49Z (UTC)
+Repository commit: b4d7726b4e5cf0a6d514447ca3f7d6429df4ba8e (auto/session-5-evidence worktree)
+$ cd / && bash /root/pixel-development/scripts/ci-local.sh
+
+== [1/5] whitespace + conflict markers — git diff --check
+   ok git diff --check
+
+== [2/5] checksum manifest lockstep — update-bootstrap-checksums.sh --check
+  ok   manifest: pixel-apps-setup.sh
+  ok   manifest: pixel-bootstrap.sh
+  ok   manifest: pixel-dev-setup.sh
+  ok   embedded: pixel-dev-setup.sh
+  ok   embedded: pixel-apps-setup.sh
+checksum manifest is current (3 artifacts, embedded digests in lockstep)
+   ok checksum --check
+
+== [3/5] shell syntax — bash -n (every tracked shell script)
+   ok bash -n (8 scripts)
+
+== [4/5] shellcheck -S warning (every tracked shell script)
+   ok shellcheck
+
+== [5/5] full test suite — bash tests/run_tests.sh
+== pixel-development test suite ==
+  ok    required file present: pixel-bootstrap.sh
+  ok    required file present: pixel-dev-setup.sh
+  ok    required file present: pixel-apps-setup.sh
+  ok    required file present: pixel-autodev.sh
+  ok    required file present: scripts/verify-bootstrap-signature.sh
+  ok    required file present: scripts/update-bootstrap-checksums.sh
+  ok    required file present: scripts/ci-local.sh
+  ok    required file present: config/bootstrap-checksums.txt
+  ok    required file present: .pixel-lab.json
+  ok    syntax: pixel-apps-setup.sh
+  ok    syntax: pixel-autodev.sh
+  ok    syntax: pixel-bootstrap.sh
+  ok    syntax: pixel-dev-setup.sh
+  ok    syntax: scripts/ci-local.sh
+  ok    syntax: scripts/update-bootstrap-checksums.sh
+  ok    syntax: scripts/verify-bootstrap-signature.sh
+  ok    syntax: tests/run_tests.sh
+  ok    shellcheck: pixel-apps-setup.sh
+  ok    shellcheck: pixel-autodev.sh
+  ok    shellcheck: pixel-bootstrap.sh
+  ok    shellcheck: pixel-dev-setup.sh
+  ok    shellcheck: scripts/ci-local.sh
+  ok    shellcheck: scripts/update-bootstrap-checksums.sh
+  ok    shellcheck: scripts/verify-bootstrap-signature.sh
+  ok    shellcheck: tests/run_tests.sh
+  ok    --help exits 0 with usage: pixel-bootstrap.sh
+  ok    unknown flag exits 2: pixel-bootstrap.sh
+  ok    --help exits 0 with usage: pixel-dev-setup.sh
+  ok    unknown flag exits 2: pixel-dev-setup.sh
+  ok    --help exits 0 with usage: pixel-apps-setup.sh
+  ok    unknown flag exits 2: pixel-apps-setup.sh
+  ok    --help exits 0 with usage: pixel-autodev.sh
+  ok    unknown flag exits 2: pixel-autodev.sh
+  ok    .pixel-lab.json declares name/stack/test
+  ok    autodev --dry-run parses task and slugifies branch
+  ok    dry-run leaves the backlog untouched
+  ok    autodev seeds BACKLOG.md + PIXEL_AGENT.md when absent
+  ok    rejects invalid --timeout=0 (exit 2, clear message)
+  ok    rejects invalid --timeout=-5 (exit 2, clear message)
+  ok    rejects invalid --timeout=abc (exit 2, clear message)
+  ok    rejects invalid --timeout= (exit 2, clear message)
+  ok    policy line shows timeout=1200s
+  ok    policy line shows timeout=45s
+  ok    policy line shows timeout=90s
+  ok    policy line shows timeout=99999999s
+  ok    timeout(1) enforces limit, returns 124
+  ok    claude + codex both wrapped in timeout "$TIMEOUT"
+  ok    success path: stub agent committed on green, backlog flipped
+  ok    claude backend: 1s timeout kills stub, branch reverted, task stays open
+  ok    codex backend: 1s timeout kills stub, branch reverted, task stays open
+  ok    apps-setup '--ssh-port 9022' (space form) rejected with exit 2
+  ok    autodev bare '--timeout' rejected with exit 2
+  ok    bootstrap bare '--repo-base' rejected with exit 2
+  ok    bootstrap '--' currently rejected as unknown flag
+  ok    rejects invalid --ssh-port=0 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=65536 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=-1 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=abc (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port= (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=22x (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port= 22 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=22;reboot (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=+22 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=99999 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=100000 (exit 2, stderr names flag)
+  ok    invalid ports create no log file (validation precedes side effects)
+  ok    accepts --ssh-port=1 (validation passed, reached preflight)
+  ok    accepts --ssh-port=22 (validation passed, reached preflight)
+  ok    accepts --ssh-port=65535 (validation passed, reached preflight)
+  ok    accepts --ssh-port=8022 (validation passed, reached preflight)
+  ok    accepts --ssh-port=08022 (validation passed, reached preflight)
+  ok    accepts --ssh-port=008022 (validation passed, reached preflight)
+  ok    duplicate --ssh-port accepted (last-wins, documented)
+  ok    duplicate --ssh-port: later valid overrides earlier invalid
+  ok    duplicate --ssh-port: later invalid rejected (last-wins validated)
+  ok    clean-clone smoke: suite passes from a fresh clone
+  ok    rejects invalid --max-tasks='0' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='-1' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='abc' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks=' 3' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='3;rm' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='1000000' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='0' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='-5' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='abc' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='1x' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='abc' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='-1' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='0' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='0.00' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='1.2.3' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='.5' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='2.' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='1;rm' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --timeout='000' (exit 2 before preflight, stderr names flag)
+  ok    --timeout=08 accepted (leading zeros tolerated, no octal trap)
+  ok    policy line shows max-turns=7
+  ok    policy line shows max-turns=7
+  ok    policy line shows budget/task=$0.50
+  ok    policy line shows budget/task=$2.00
+  ok    policy line shows budget/task=$10
+  ok    policy line shows max-turns=030
+  ok    --max-tasks=08 canonicalised to 8 (octal-safe loop bound)
+  ok    duplicate --max-tasks: last wins (9 then 1 → 1)
+  ok    invalid --max-tasks creates no .autodev state and seeds nothing
+  ok    rejects invalid --agent='foo' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='CLAUDE' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='Claude' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='claude2' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='claude;rm' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='claude ' (exit 2 before preflight, stderr names flag)
+  ok    accepts --agent=claude
+  ok    accepts --agent=codex
+  ok    duplicate --agent: later valid overrides earlier invalid
+  ok    duplicate --agent: later invalid rejected (last-wins validated)
+  ok    '--' rejected as unknown flag: pixel-dev-setup.sh
+  ok    '--' rejected as unknown flag: pixel-apps-setup.sh
+  ok    '--' rejected as unknown flag: pixel-autodev.sh
+  ok    '-- --help' still exit 2 ('--' does not enable pass-through): pixel-bootstrap.sh
+  ok    positional argument rejected: pixel-bootstrap.sh
+  ok    '-- --help' still exit 2 ('--' does not enable pass-through): pixel-dev-setup.sh
+  ok    positional argument rejected: pixel-dev-setup.sh
+  ok    '-- --help' still exit 2 ('--' does not enable pass-through): pixel-apps-setup.sh
+  ok    positional argument rejected: pixel-apps-setup.sh
+  ok    '-- --help' still exit 2 ('--' does not enable pass-through): pixel-autodev.sh
+  ok    positional argument rejected: pixel-autodev.sh
+  ok    trailing positional after valid flag rejected: pixel-autodev.sh
+  ok    dry-run skips agent resolution (no paid-agent executable required)
+  ok    non-dry-run resolves the agent in preflight (dispatch stays stub-pinned)
+  ok    .gitattributes pins LF endings (text=auto eol=lf)
+  ok    git check-attr confirms eol=lf for tracked scripts
+  ok    preflight fails closed: GNU timeout (coreutils) is required (exit 1, no state created)
+  ok    preflight fails closed: git not installed in devbox (exit 1, no state created)
+  ok    preflight fails closed: 'claude' not found (exit 1, no state created)
+  ok    preflight fails closed: 'codex' not found (exit 1, no state created)
+  ok    usage error (exit 2) precedes dependency resolution
+  ok    dry-run requires no agent executable even via the seam
+  ok    path override resolves (/bin/true as timeout)
+  ok    bare-name override resolves through PATH; dispatch runs the stub
+  ok    metacharacter seam value is never executed (quoted throughout)
+  ok    checksum manifest exists and covers all three pinned artifacts
+  ok    manifest pin matches repo content: pixel-dev-setup.sh (lockstep)
+  ok    embedded digest matches manifest: pixel-dev-setup.sh
+  ok    manifest pin matches repo content: pixel-apps-setup.sh (lockstep)
+  ok    embedded digest matches manifest: pixel-apps-setup.sh
+  ok    manifest pin matches repo content: pixel-bootstrap.sh (anchor lockstep)
+  ok    no unverified curl|bash in bootstrap downloads (only chartered updater shortcut remains)
+  ok    downloads land in a temp file, never directly in $DEST
+  ok    valid downloads verify (sha256) and install
+  ok    shortcuts created only after verified installs
+  ok    checksum mismatch fails closed (no install, no shortcuts, no temp)
+  ok    failed download installs no partial content (temp cleaned)
+  ok    missing checksum entry fails closed (apps-setup not installed)
+  ok    metacharacter repo-base value is never executed
+  ok    README §1 pins a full-commit URL and a SHA-256
+  ok    README pin digest == sha256 of the pinned git object
+  ok    README §1 primary block has no pipe-to-shell
+  ok    PIXEL_REPO_BASE pins the same immutable commit
+  ok    valid detached signature verifies (gpgv)
+  ok    tampered artifact fails signature verification (exit 1)
+  ok    untrusted keyring rejects a genuine signature
+  ok    missing signature file is a clear error
+  ok    missing gpgv fails with a named dependency (exit 1)
+  ok    signature helper: no args is a usage error (exit 2)
+  ok    signature helper: unknown flag is a usage error (exit 2)
+  ok    metacharacter GPGV_BIN value is never executed
+  ok    checksum tool: current manifest passes --check (path with spaces)
+  ok    checksum tool: stale manifest fails --check naming the artifact
+  ok    checksum tool: --write repairs stale manifest+embedded (no temp leftovers)
+  ok    checksum tool: missing artifact fails clearly
+  ok    checksum tool: malformed manifest line rejected
+  ok    checksum tool: duplicate manifest entry rejected
+  ok    checksum tool: unexpected artifact name rejected
+  ok    checksum tool: deterministic sorted order; second --write changes nothing
+  ok    checksum tool: symlink artifact refused
+  ok    checksum tool: --check is non-mutating on a stale manifest
+  ok    checksum tool: failed --write leaves manifest byte-identical (no partial state)
+  ok    checksum tool: embedded/manifest mismatch detected
+  ok    checksum tool: unknown argument is a usage error (exit 2)
+  ok    checksum tool: --check --write conflict is a usage error (exit 2)
+  ok    checksum tool: --check passes from a clean clone
+  ok    release doc: 'current' pin-history row matches the pinned git object
+  ok    release doc: rollback path + operator-owned publishing documented
+  ok    workflow: valid-YAML hygiene (no tabs), least-privilege permissions
+  ok    CI parity: gate in workflow AND ci-local.sh: git diff --check
+  ok    CI parity: gate in workflow AND ci-local.sh: bash scripts/update-bootstrap-checksums.sh --check
+  ok    CI parity: gate in workflow AND ci-local.sh: bash tests/run_tests.sh
+  ok    workflow triggers cover main + auto/* integration branches
+  ok    workflow invokes no paid agent and uses no secret context
+  ok    ci-local.sh preserves failing step exit status and cds to repo root
+  ok    SIGTERM mid-download: bootstrap exits and temp download dir is cleaned
+  ok    INT/TERM traps route through the EXIT trap (cleanup on signals)
+  ok    installed scripts are executable with deliberate permissions (755/755)
+  ok    download-then-verify order pinned (redirect-safe by construction)
+  ok    shipped manifest passes its own checksum gate
+
+passed: 199   failed: 0   skipped: 0
+
+ci-local: ALL GATES PASSED
+ci-local exit=0
+Finished: 2026-07-11T15:48:19Z (UTC)

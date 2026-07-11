@@ -1,0 +1,66 @@
+Session 5 trust-model evidence
+Generated: 2026-07-11T15:38:00Z (UTC) on commit b4d7726b4e5cf0a6d514447ca3f7d6429df4ba8e
+
+== 1. README verified-install block (no pipe-to-shell) ==
+$ sed -n 12,40p README.md
+## 1. Quick start
+
+**Prerequisite:** install **Termux** from **F-Droid** (or GitHub releases) — *not*
+the Play Store build, which is unmaintained. Open Termux, then run the
+**verified install** (fetch → verify → run; never pipe a download into a shell):
+
+```bash
+# 1. Fetch the bootstrap script from an immutable commit URL
+curl -fL -o pixel-bootstrap.sh \
+  "https://raw.githubusercontent.com/B0LK13/pixel-development/c8a5466c31d0a8dc4a461da0d3acc2c7ac487610/pixel-bootstrap.sh"
+
+# 2. Verify it against the pinned SHA-256 (must print: pixel-bootstrap.sh: OK)
+printf '%s  %s\n' \
+  "5bbec677ddfbe5fb853686954743b90637479f26ae1f8487622b4572aa0e6785" \
+  "pixel-bootstrap.sh" | sha256sum -c -
+
+# 3. Run it — pinning the same commit, so the two setup scripts come from the
+#    same immutable ref and match the bootstrap's embedded pins
+PIXEL_REPO_BASE="https://raw.githubusercontent.com/B0LK13/pixel-development/c8a5466c31d0a8dc4a461da0d3acc2c7ac487610" \
+  bash pixel-bootstrap.sh --open-store
+```
+
+Why the ceremony: the commit-pinned URL is immutable, and the digest proves
+the bytes you run are the bytes that were pinned (see
+[`docs/BOOTSTRAP_TRUST_MODEL.md`](docs/BOOTSTRAP_TRUST_MODEL.md) for the full
+chain). If step 2 prints anything but `pixel-bootstrap.sh: OK`, **do not run
+the script** — delete it. The pinned digest travels with the release notes
+and this README; you can also establish it independently from a clone
+(`git clone … && sha256sum pixel-bootstrap.sh`) — a different channel than the
+
+== 2. Pinned bootstrap object digest equals README digest ==
+$ git show c8a5466:pixel-bootstrap.sh | sha256sum
+5bbec677ddfbe5fb853686954743b90637479f26ae1f8487622b4572aa0e6785  -
+README documented digest: 5bbec677ddfbe5fb853686954743b90637479f26ae1f8487622b4572aa0e6785
+
+== 3. Manifest verifies against working-tree files ==
+$ sha256sum -c config/bootstrap-checksums.txt
+pixel-apps-setup.sh: OK
+pixel-bootstrap.sh: OK
+pixel-dev-setup.sh: OK
+
+== 4. Checksum lifecycle gate (check mode, non-mutating) ==
+$ bash scripts/update-bootstrap-checksums.sh --check; echo exit=$?
+  ok   manifest: pixel-apps-setup.sh
+  ok   manifest: pixel-bootstrap.sh
+  ok   manifest: pixel-dev-setup.sh
+  ok   embedded: pixel-dev-setup.sh
+  ok   embedded: pixel-apps-setup.sh
+checksum manifest is current (3 artifacts, embedded digests in lockstep)
+exit=0
+
+== 5. Signature helper usage contract (usage error exits 2) ==
+$ bash scripts/verify-bootstrap-signature.sh; echo exit=$?
+usage: bash scripts/verify-bootstrap-signature.sh --keyring=PUBKEY_FILE --signature=SIG_FILE ARTIFACT
+exit=2
+
+== 6. Signature fixture coverage ==
+Exercised hermetically by tests/run_tests.sh section 19 on every suite run
+(ephemeral ed25519 gpg keypair generated in $tmp; valid signature accepted,
+tampered script rejected, missing signature rejected, missing key rejected).
+See evidence/session-5/ci-parity.txt for the full gate output.

@@ -1,0 +1,25 @@
+Session 5 test results
+Suite command: bash tests/run_tests.sh
+All runs are post-merge full-suite runs on auto/integrate-session-5.
+
+Gate chain:
+  base   c8a5466 .................. 146 passed / 0 failed / 0 skipped
+  merge  322f9ec (trust-model) .... 146 passed / 0 failed / 0 skipped
+  merge  4eed914 (anchor) ......... 159 passed / 0 failed / 0 skipped
+  merge  3e213b7 (checksum tool) .. 174 passed / 0 failed / 0 skipped
+  merge  3bd2182 (release doc) .... 176 passed / 0 failed / 0 skipped
+  merge  5aac1e5 (ci-parity) ...... 183 passed / 0 failed / 0 skipped
+  merge  5115a3f (security) ....... 188 passed / 0 failed / 0 skipped
+  merge  b4d7726 (perf timings) ... 199 passed / 0 failed / 0 skipped (wall 3m32s)
+
+Tests added this session: 53 (146 -> 199), zero skipped.
+Sections added or extended in tests/run_tests.sh:
+  16  checksum manifest 3-way lockstep (manifest vs files vs embedded digests)
+  18  README pin contract (pinned object digest, no pipe-to-shell, REPO_BASE same commit)
+  19  bootstrap signature fixtures (ephemeral ed25519 gpg keys, 8 cases)
+  20  checksum lifecycle tool (15 cases: stale/missing/malformed/duplicate/symlink/atomic)
+  21  release-process governance (current pin row tied to git object)
+  22  CI parity guard (workflow <-> scripts/ci-local.sh gate correspondence)
+  23  trust invariants (SIGTERM cleanup, trap routing, install perms, verify order)
+  0-2 extended: bash -n, shellcheck, and whitespace gates now cover all 8 tracked
+      shell scripts via git ls-files (previously only the top-level scripts)

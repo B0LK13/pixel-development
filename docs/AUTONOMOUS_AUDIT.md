@@ -276,3 +276,66 @@ and no seam is added solely for testing.
   Remote CI remains operator-owned (no push this session).
 - **R4** — unchanged: document-only; `--` stays an unknown flag (exit 2),
   pinned by harness §7/§12.
+
+## Session 5 follow-up (main @ 711c23b + auto/integrate-session-5)
+
+- **R1 anchor authenticity — materially reduced (Tier 1 implemented; Tier 2
+  mechanics ready; production signing operator-blocked).** The Session 4
+  residual sub-item now has an architecture
+  (`docs/adr/ADR-BOOTSTRAP-ANCHOR-AUTHENTICITY.md`, target Option D:
+  versioned release + immutable reference + SHA-256 + detached signature)
+  and a formal trust model (`docs/BOOTSTRAP_TRUST_MODEL.md`):
+  - *Tier 1 (implemented).* The README one-liner is replaced by a verified
+    flow: fetch `pixel-bootstrap.sh` from an immutable commit-pinned URL,
+    verify its SHA-256 obtained out of band, run it with `PIXEL_REPO_BASE`
+    pinned to the same commit so both payloads come from the same immutable
+    ref. The pin contract is tested against the real git object (harness
+    §18). No `curl | bash` path remains in the primary documentation.
+  - *Tier 2 (mechanics implemented).* `scripts/verify-bootstrap-signature.sh`
+    verifies a detached gpg signature with an operator-supplied keyring
+    (`GPGV_BIN` seam; usage errors exit 2, verification failures exit 1).
+    Hermetic ed25519 fixtures in harness §19. Production signing — a real
+    project key, a published fingerprint, signed release artifacts — is
+    operator-blocked: the loop must not invent a trusted identity.
+    Prerequisites and acceptance criteria live in the ADR.
+  - *Residual risk (reduced, not eliminated).* Repository-host or account
+    compromise still defeats Tier 1; authenticity today rests on the
+    out-of-band digest channel, and from the first signed release onward on
+    the published key fingerprint. Documented in the trust model.
+- **Checksum lifecycle governance — implemented.**
+  `scripts/update-bootstrap-checksums.sh` (`--check` default, non-mutating,
+  exit 1 when stale with itemized drift; `--write` updates the embedded
+  digests first, then atomically replaces the manifest; rejects malformed,
+  duplicate, or unexpected entries, symlink escapes, and missing artifacts;
+  no network). The two sources of truth — manifest and embedded pins — can
+  no longer drift silently: check mode is a local gate, a CI step, and
+  harness §16/§20.
+- **CI operational verification — implemented locally.** The workflow gained
+  the checksum lockstep step; `scripts/ci-local.sh` runs the same five gates
+  network-free from any cwd (`git diff --check`, checksum `--check`,
+  `bash -n` on all tracked shell scripts, ShellCheck on all tracked shell
+  scripts, full suite), failing fast with the failing step's exit status.
+  Parity is pinned by harness §22. Remote CI remains operator-owned: nothing
+  was pushed; triggers already cover `auto/*`.
+- **Release readiness — documented.** `docs/BOOTSTRAP_RELEASE_PROCESS.md`:
+  SemVer + signed-tag model, immutable commit references, checksum manifest
+  schema v1, compatibility guarantees, minimum supported bootstrap,
+  update/rollback and key-compromise procedures, operator release checklist.
+  Governance test §21 ties the documented current pin to the git object.
+- **Signal hardening — implemented.** `pixel-bootstrap.sh` routes INT/TERM
+  through the EXIT trap, so a mid-download interrupt removes the temp
+  download dir (harness §23). Installed-script permissions are pinned at
+  755 by test.
+- **Lint coverage defect fixed.** Harness §0/§1/§2 previously covered only
+  the top-level scripts; they now iterate `git ls-files '*.sh'` (8 scripts),
+  closing the `scripts/*.sh` blind spot.
+- **Performance budget — measured, not optimized.** Full suite 3m31s
+  (baseline ≈2m45s); the nested clean-clone proof is ≈48–50% of wall time
+  (101–109s) and is retained per charter. Opt-in per-section profiler:
+  `PIXEL_TEST_TIMINGS=1` (evidence/session-5/test-timings.txt). No assertion
+  removed; correctness took priority over the modest available reduction.
+- **R4** — unchanged: document-only; `--` stays an unknown flag (exit 2),
+  pinned by harness §7/§12.
+- **Remote CI** — not run (no push). Static workflow validation plus local
+  parity only; operator-triggered run instructions are in
+  `reports/session-5-final-report.md`.
