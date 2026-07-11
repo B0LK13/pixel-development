@@ -98,6 +98,114 @@ else
   t_fail "autodev seeding" "rc=$rc"$'\n'"$out"
 fi
 
+# --- 6. --timeout contract ------------------------------------------------------
+# mk_ws <dir>: fixture git workspace with a clean tree (repo-local identity,
+# committed charter + .gitignore). Caller then writes BACKLOG.md and commits.
+mk_ws(){
+  local d="$1"; mkdir -p "$d"; git -C "$d" init -q 2>/dev/null
+  git -C "$d" config user.name t; git -C "$d" config user.email t@t
+  printf '# test charter\n' > "$d/PIXEL_AGENT.md"
+  printf '.autodev/\n' > "$d/.gitignore"
+  git -C "$d" add -A && git -C "$d" commit -qm init >/dev/null
+}
+# preflight also needs a `codex` binary to resolve (CI images may lack one)
+cat > "$tmp/bin/codex" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$tmp/bin/codex"
+
+# 6a. invalid values fail fast (exit 2 + clear message) BEFORE preflight —
+#     proven by pointing at a workspace that does not exist.
+for bad in "--timeout=0" "--timeout=-5" "--timeout=abc" "--timeout="; do
+  err="$(bash "$ROOT/pixel-autodev.sh" "$bad" --workspace=/nonexistent-pixel-ws 2>&1)"; rc=$?
+  if [ $rc -eq 2 ] && case "$err" in *"positive integer"*) true;; *) false;; esac; then
+    t_ok "rejects invalid $bad (exit 2, clear message)"
+  else
+    t_fail "invalid $bad must exit 2 with a message" "rc=$rc"$'\n'"$err"
+  fi
+done
+
+# 6b. value resolution shown in the dry-run policy line
+ws6="$tmp/ws6"; mk_ws "$ws6"
+printf -- '- [ ] Placeholder timeout-resolution task\n' > "$ws6/BACKLOG.md"
+git -C "$ws6" add -A && git -C "$ws6" commit -qm task >/dev/null
+check_policy(){ # $1 expected substring, rest = extra flags
+  local want="$1"; shift
+  out="$(PATH="$APATH" bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$ws6" "$@" 2>&1)"; rc=$?
+  if [ $rc -eq 0 ] && case "$out" in *"$want"*) true;; *) false;; esac; then
+    t_ok "policy line shows $want"
+  else
+    t_fail "policy line must show $want" "rc=$rc"$'\n'"$out"
+  fi
+}
+check_policy "timeout=1200s"                          # default
+check_policy "timeout=45s"  --timeout=45              # explicit valid value
+check_policy "timeout=90s"  --timeout=10 --timeout=90 # duplicate flags: last wins
+check_policy "timeout=99999999s" --timeout=99999999   # very large value accepted
+
+# 6c. the timeout mechanism itself enforces (short deterministic fixture)
+if command -v timeout >/dev/null 2>&1; then
+  timeout 1 sleep 30; rc=$?
+  if [ $rc -eq 124 ]; then t_ok "timeout(1) enforces limit, returns 124"; else t_fail "timeout mechanism" "rc=$rc"; fi
+else
+  t_skip "timeout(1) not available on this platform"
+fi
+
+# 6d. both agent backends run under the same resolved timeout value
+n="$(grep -c 'timeout "\$TIMEOUT"' "$ROOT/pixel-autodev.sh")"
+if [ "$n" -eq 2 ]; then t_ok "claude + codex both wrapped in timeout \"\$TIMEOUT\""; else t_fail "timeout wiring" "found $n wrapped call(s), want 2"; fi
+
+# 6e. end-to-end success path with a stub agent (hermetic — no paid calls)
+cat > "$tmp/bin/fake-claude" <<'EOF'
+#!/usr/bin/env bash
+echo fake-change > agent-made-change.txt
+echo "fake claude: made one change"
+exit 0
+EOF
+chmod +x "$tmp/bin/fake-claude"
+ws7="$tmp/ws7"; mk_ws "$ws7"
+printf -- '- [ ] Probe autonomous success path\n' > "$ws7/BACKLOG.md"
+git -C "$ws7" add -A && git -C "$ws7" commit -qm task >/dev/null
+out="$(env PATH="$APATH" CLAUDE_BIN="$tmp/bin/fake-claude" bash "$ROOT/pixel-autodev.sh" --workspace="$ws7" --timeout=30 2>&1)"; rc=$?
+last="$(git -C "$ws7" log --format=%s -1 2>/dev/null)"
+if [ $rc -eq 0 ] && [ "$last" = "feat(auto): Probe autonomous success path" ] \
+   && grep -q '^- \[x\] Probe autonomous success path' "$ws7/BACKLOG.md"; then
+  t_ok "success path: stub agent committed on green, backlog flipped"
+else
+  t_fail "autodev success path" "rc=$rc last=$last"$'\n'"$out"
+fi
+
+# 6f. end-to-end timeout path per backend (stub sleeps past a 1s limit)
+cat > "$tmp/bin/slow-agent" <<'EOF'
+#!/usr/bin/env bash
+sleep 30
+exit 0
+EOF
+chmod +x "$tmp/bin/slow-agent"
+ws8="$tmp/ws8"; mk_ws "$ws8"
+printf -- '- [ ] Probe claude timeout path\n' > "$ws8/BACKLOG.md"
+git -C "$ws8" add -A && git -C "$ws8" commit -qm task >/dev/null
+out="$(env PATH="$APATH" CLAUDE_BIN="$tmp/bin/slow-agent" bash "$ROOT/pixel-autodev.sh" --workspace="$ws8" --timeout=1 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"timed out after 1s"*) true;; *) false;; esac \
+   && [ -z "$(git -C "$ws8" branch --list 'auto/*')" ] \
+   && grep -q '^- \[ \] Probe claude timeout path' "$ws8/BACKLOG.md"; then
+  t_ok "claude backend: 1s timeout kills stub, branch reverted, task stays open"
+else
+  t_fail "claude timeout path" "rc=$rc"$'\n'"$out"
+fi
+ws9="$tmp/ws9"; mk_ws "$ws9"
+printf -- '- [ ] Probe codex timeout path\n' > "$ws9/BACKLOG.md"
+git -C "$ws9" add -A && git -C "$ws9" commit -qm task >/dev/null
+out="$(env PATH="$APATH" CODEX_BIN="$tmp/bin/slow-agent" bash "$ROOT/pixel-autodev.sh" --workspace="$ws9" --agent=codex --timeout=1 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"timed out after 1s"*) true;; *) false;; esac \
+   && [ -z "$(git -C "$ws9" branch --list 'auto/*')" ] \
+   && grep -q '^- \[ \] Probe codex timeout path' "$ws9/BACKLOG.md"; then
+  t_ok "codex backend: 1s timeout kills stub, branch reverted, task stays open"
+else
+  t_fail "codex timeout path" "rc=$rc"$'\n'"$out"
+fi
+
 # --- summary ------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
