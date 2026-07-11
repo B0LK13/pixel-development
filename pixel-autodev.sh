@@ -75,6 +75,12 @@ case "$BUDGET" in
   ''|*[!0-9.]*|*.*.*|.*|*.) bad_value --budget "a positive number (e.g. 2.00)" "$BUDGET" ;;
 esac
 [ -n "${BUDGET//[0.]/}" ] || bad_value --budget "a positive number (e.g. 2.00)" "$BUDGET"
+# --agent selects the dispatch backend; anything outside the enum is a usage
+# error, so an unknown name can never reach command lookup in preflight.
+case "$AGENT" in
+  claude|codex) ;;
+  *) bad_value --agent "one of: claude, codex" "$AGENT" ;;
+esac
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_R=$'\033[0m'; C_B=$'\033[1m'; C_DIM=$'\033[2m'
