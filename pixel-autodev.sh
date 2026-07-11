@@ -25,7 +25,7 @@ BUDGET="2.00"
 MODEL="sonnet"
 AGENT="claude"
 PMODE="dontAsk"     # CI-safe: no prompts, honors allow/deny lists
-PUSH=0; DRY=0; ASSUME_YES=0
+PUSH=0; DRY=0
 CHARTER="PIXEL_AGENT.md"
 
 for a in "$@"; do case "$a" in
@@ -39,7 +39,7 @@ for a in "$@"; do case "$a" in
   --yolo)        PMODE="bypassPermissions" ;;
   --push)        PUSH=1 ;;
   --dry-run)     DRY=1 ;;
-  --yes|-y)      ASSUME_YES=1 ;;
+  --yes|-y)      : ;;  # accepted for CLI parity with pixel-dev-setup.sh (autodev never prompts)
   --help|-h) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "Unknown flag: $a (try --help)"; exit 2 ;;
 esac; done
@@ -211,7 +211,8 @@ agent_run(){ # $1 repo_dir  $2 prompt_file
 }
 
 do_task(){ # $1 index
-  local i="$1" text="${TEXT[$i]}" repo="${REPO[$i]}" raw="${RAW[$i]}"
+  local i="$1"
+  local text="${TEXT[$i]}" repo="${REPO[$i]}" raw="${RAW[$i]}"
   local dir="$WORKSPACE"; [ -n "$repo" ] && dir="$WORKSPACE/$repo"
   local slug; slug="$(slugify "$text")"
   step "Task $((i+1)): ${repo:+[$repo] }$text"

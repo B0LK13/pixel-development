@@ -181,7 +181,7 @@ command -v zoxide  >/dev/null 2>&1 && eval "$(zoxide init bash)"
 [ -f "$PREFIX/share/fzf/key-bindings.bash" ] && source "$PREFIX/share/fzf/key-bindings.bash"
 # --- /PIXEL-DEV SHELL ---
 RCEOF
-    ok "~/.bashrc enhanced (starship prompt, aliases, fzf, zoxide, devbox)"
+    ok "$HOME/.bashrc enhanced (starship prompt, aliases, fzf, zoxide, devbox)"
   else
     ok "Shell config already present"
   fi

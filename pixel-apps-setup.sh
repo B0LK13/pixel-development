@@ -22,7 +22,7 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 SCRIPT_VERSION="1.0.0"
 LOG_FILE="${HOME}/pixel-apps-setup.log"
-OPEN_STORES=0; TS_CLI=0; NO_FONT=0; ASSUME_YES=0; SSH_PORT=8022
+OPEN_STORES=0; TS_CLI=0; NO_FONT=0; SSH_PORT=8022
 FAILED=()
 
 for arg in "$@"; do
@@ -30,7 +30,7 @@ for arg in "$@"; do
     --open-stores)        OPEN_STORES=1 ;;
     --with-tailscale-cli) TS_CLI=1 ;;
     --no-font)            NO_FONT=1 ;;
-    --yes|-y)             ASSUME_YES=1 ;;
+    --yes|-y)             : ;;  # accepted for CLI parity with pixel-dev-setup.sh (no prompts here)
     --ssh-port=*)         SSH_PORT="${arg#*=}" ;;
     --help|-h) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown flag: $arg (try --help)"; exit 2 ;;
