@@ -1,0 +1,64 @@
+Session 5 final status
+Generated: 2026-07-11T15:54:07Z (UTC) on branch auto/session-5-evidence
+
+== commit graph (session 5 range, pre-merge) ==
+$ git log --oneline --graph c8a5466..HEAD
+* 7087d66 chore: capture session 5 verification evidence
+*   b4d7726 Merge branch 'auto/session-5-perf-timings' into auto/integrate-session-5
+|\
+| * 0627779 test: measure suite by section; lint all tracked shell scripts
+|/
+*   5115a3f Merge branch 'auto/session-5-security-tests' into auto/integrate-session-5
+|\
+| * 61f2c5a fix: clean up bootstrap temp dir on signals; test trust invariants
+|/
+*   5aac1e5 Merge branch 'auto/ci-parity-gates' into auto/integrate-session-5
+|\
+| * 1e31538 ci: add checksum and local parity gates
+|/
+*   3bd2182 Merge branch 'auto/bootstrap-release-process' into auto/integrate-session-5
+|\
+| * 7d5deaa docs: document bootstrap release and rollback process
+|/
+*   3e213b7 Merge branch 'auto/checksum-lifecycle-tool' into auto/integrate-session-5
+|\
+| * f9cb6e8 test: cover checksum lifecycle tool
+| * 17b8416 feat: add checksum lifecycle verifier
+|/
+*   4eed914 Merge branch 'auto/bootstrap-anchor-verification' into auto/integrate-session-5
+|\
+| * bd3c71d feat: verified anchor install flow, 3-entry manifest, signature helper
+|/
+* 322f9ec Merge branch 'auto/bootstrap-trust-model' into auto/integrate-session-5
+* 4728908 docs: define bootstrap trust model and anchor authenticity ADR
+
+== main untouched ==
+$ git rev-parse main
+711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c
+(expected 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c)
+
+== final-tip clean clone (full suite, includes nested clone proof) ==
+$ git clone -q /root/pixel-development /tmp/s5-final-clone && cd /tmp/s5-final-clone && bash tests/run_tests.sh
+clone HEAD: 7087d66f6fbef68a6ce6fbe1ba06df12992eca7b (auto/session-5-evidence)
+passed: 199   failed: 0   skipped: 0   (wall 3m30s; clone working tree clean afterwards)
+
+== quick gates on the branch tip ==
+$ for f in $(git ls-files "*.sh"); do bash -n "$f"; done
+bash -n: ok (8 scripts)
+$ shellcheck -S warning $(git ls-files "*.sh")
+shellcheck: clean at warning severity
+$ git diff --check
+diff --check: clean
+$ git ls-files --eol
+     42 w/lf
+tracked files: 42, all w/lf
+$ git status --short
+?? evidence/session-5/final-status.txt
+(clean)
+
+== integration merge note ==
+The merge of this branch into auto/integrate-session-5 is the session
+closing step. This branch descends directly from the integration tip, so
+the merge tree is byte-identical to this branch tip; post-merge quick
+gates and the tree-equivalence check are reported in the operator chat
+summary accompanying this evidence.

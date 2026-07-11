@@ -13,7 +13,10 @@ complete
   (Session 1); Session 4 has not been promoted to `main`, so Session 5 was
   branched from `auto/integrate-session-4` per the base-selection rule
 - integration branch: `auto/integrate-session-5`
-- final integration commit: recorded in `evidence/session-5/final-status.txt`
+- final integration commit: the merge of `auto/session-5-evidence` into
+  `auto/integrate-session-5`, created as the session's closing step; its tree
+  is byte-identical to the evidence branch tip `7087d66` (post-merge
+  equivalence verified — see `evidence/session-5/final-status.txt`)
 - conflicts: none
 - deviations: none
 
