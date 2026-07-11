@@ -221,9 +221,9 @@ and `auto/*` and on every pull request — local tests only, `contents: read`,
 
 - Agents never push; **the operator owns merging `auto/*` and all publication.**
 - One task = one `auto/<slug>` branch; commit only when the gate is green.
-- `--ssh-port` currently uses equals syntax only (`--ssh-port=9022`).
-- `--timeout` defaults to **1200 seconds** and must be a positive integer.
-- `--dry-run` never invokes an agent.
+- `--ssh-port` uses equals syntax only and must be an integer in **1–65535** (`--ssh-port=9022`).
+- `--timeout` defaults to **1200 seconds**; `--max-tasks`, `--max-turns`, `--budget`, and `--timeout` are all validated before anything runs (malformed input = exit 2, no state touched).
+- `--agent` accepts only `claude` or `codex`; `--dry-run` never invokes an agent and needs no agent binary installed.
 - Full flag contract: [`docs/CLI_CONTRACT.md`](docs/CLI_CONTRACT.md).
   Security + portability audit: [`docs/AUTONOMOUS_AUDIT.md`](docs/AUTONOMOUS_AUDIT.md).
 
