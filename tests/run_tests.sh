@@ -416,6 +416,22 @@ else
   t_fail "non-dry-run agent resolution" "rc=$rc"$'\n'"$out"
 fi
 
+# --- 14. line-ending contract (audit R6) --------------------------------------------
+# CRLF checkouts would break shebangs; .gitattributes pins LF so an autocrlf
+# client cannot silently corrupt the scripts. Adding it must not renormalise
+# the tree (all blobs are already LF — the clean tree proves it).
+if [ -f .gitattributes ] && grep -q 'text=auto eol=lf' .gitattributes; then
+  t_ok ".gitattributes pins LF endings (text=auto eol=lf)"
+else
+  t_fail ".gitattributes must pin LF endings (text=auto eol=lf)"
+fi
+attr="$(git check-attr eol -- pixel-bootstrap.sh 2>/dev/null)"
+if case "$attr" in *"eol: lf"*) true;; *) false;; esac; then
+  t_ok "git check-attr confirms eol=lf for tracked scripts"
+else
+  t_fail "git check-attr eol" "got: $attr"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
