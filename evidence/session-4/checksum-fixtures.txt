@@ -1,0 +1,22 @@
+Checksum/download verification fixture tests (harness §16/§17) — session 4
+==========================================================================
+Source: full suite run on auto/document-session-4 @ 94c5303 (146/146 green).
+Strategy: hermetic only — curl file:// fixtures + stub binaries, no network.
+
+
+--- §16 manifest lockstep ---
+    ok    checksum manifest exists and covers both fetched scripts
+    ok    manifest pin matches repo content: pixel-dev-setup.sh (lockstep)
+    ok    embedded digest matches manifest: pixel-dev-setup.sh
+    ok    manifest pin matches repo content: pixel-apps-setup.sh (lockstep)
+    ok    embedded digest matches manifest: pixel-apps-setup.sh
+    ok    no unverified curl|bash in bootstrap downloads (only chartered updater shortcut remains)
+
+--- §17 download verification (functional) ---
+    ok    downloads land in a temp file, never directly in $DEST
+    ok    valid downloads verify (sha256) and install
+    ok    shortcuts created only after verified installs
+    ok    checksum mismatch fails closed (no install, no shortcuts, no temp)
+    ok    failed download installs no partial content (temp cleaned)
+    ok    missing checksum entry fails closed (apps-setup not installed)
+    ok    metacharacter repo-base value is never executed

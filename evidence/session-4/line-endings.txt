@@ -1,0 +1,26 @@
+=== git ls-files --eol (tracked files) ===
+i/lf    w/lf    attr/text=auto eol=lf 	.gitattributes
+i/lf    w/lf    attr/text=auto eol=lf 	.github/workflows/test.yml
+i/lf    w/lf    attr/text=auto eol=lf 	.gitignore
+i/lf    w/lf    attr/text=auto eol=lf 	.pixel-lab.json
+i/lf    w/lf    attr/text=auto eol=lf 	KICKSTART.md
+i/lf    w/lf    attr/text=auto eol=lf 	LICENSE
+i/lf    w/lf    attr/text=auto eol=lf 	README.md
+i/lf    w/lf    attr/text=auto eol=lf 	VERSION
+i/lf    w/lf    attr/text=auto eol=lf 	config/bootstrap-checksums.txt
+i/lf    w/lf    attr/text=auto eol=lf 	docs/AUTONOMOUS_AUDIT.md
+i/lf    w/lf    attr/text=auto eol=lf 	docs/CLI_CONTRACT.md
+i/lf    w/lf    attr/text=auto eol=lf 	pixel-apps-setup.sh
+i/lf    w/lf    attr/text=auto eol=lf 	pixel-autodev.sh
+i/lf    w/lf    attr/text=auto eol=lf 	pixel-bootstrap.sh
+i/lf    w/lf    attr/text=auto eol=lf 	pixel-dev-setup.sh
+i/lf    w/lf    attr/text=auto eol=lf 	reports/session-4-integration-audit.md
+i/lf    w/lf    attr/text=auto eol=lf 	tests/run_tests.sh
+=== check-attr eol on shell scripts ===
+pixel-apps-setup.sh: eol: lf
+pixel-autodev.sh: eol: lf
+pixel-bootstrap.sh: eol: lf
+pixel-dev-setup.sh: eol: lf
+tests/run_tests.sh: eol: lf
+=== .gitattributes ===
+* text=auto eol=lf

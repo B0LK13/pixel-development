@@ -1,0 +1,15 @@
+Final status — session 4
+======================
+Captured: 2026-07-11T12:52:47Z
+
+--- branch ---
+auto/session-4-evidence
+--- HEAD ---
+c44636b docs: add session 4 evidence and final report
+--- git status --short --branch ---
+## auto/session-4-evidence
+?? evidence/session-4/final-status.txt
+(empty below the branch line == clean working tree)
+
+--- stash ---
+(none)

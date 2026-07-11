@@ -1,0 +1,28 @@
+CI static validation — session 4
+================================
+Workflow: .github/workflows/test.yml (job `suite`, ubuntu-latest, bash)
+
+Trigger coverage: push to `main` and `auto/*`, plus pull_request.
+- The session integration branches (auto/integrate-session-*) match `auto/*`,
+  so a push of any of them would trigger the run. Trigger rules unchanged.
+
+Gates executed by the workflow:
+  1. actions/checkout@v4
+  2. apt-get install shellcheck
+  3. git diff --check          (whitespace/conflict-marker gate — added this session, ed2335c)
+  4. bash tests/run_tests.sh   (full hermetic suite)
+
+The suite itself executes, in-tree: bash -n on every tracked shell script,
+shellcheck -S warning on every tracked shell script (skipped with notice when
+absent), plus the full functional/contract matrix. So all gates requested by
+the session charter (harness, bash -n, shellcheck, git diff --check,
+line-ending policy via .gitattributes eol=lf) are covered either by the
+workflow directly or by the harness it invokes.
+
+Equivalent commands run locally this session (see test-results.txt,
+syntax-check.txt, shellcheck.txt): all PASS on the integration tip.
+
+Remote CI status: NOT RUN. Nothing was pushed this session, so no GitHub
+Actions run exists for these commits. Remote CI remains operator-owned:
+  git push origin main            # triggers the workflow on main
+  gh run list --branch main       # inspect the resulting run (if gh is set up)
