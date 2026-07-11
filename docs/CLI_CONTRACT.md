@@ -52,8 +52,9 @@ The parity `--yes` lives in the other three scripts.
 fetches (`pixel-dev-setup.sh`, `pixel-apps-setup.sh`) are downloaded to a
 temp file and verified against pinned SHA-256 digests *before* installation
 (`pixel-bootstrap.sh:96-115`). Fail closed — exit 1, nothing installed, temp
-removed by an `EXIT` trap — on download failure, missing digest, missing hash
-tool, or mismatch. Local/cached copies are operator-trusted and skip
+removed by an `EXIT` trap (INT/TERM route through it, so a signal
+mid-download also cleans up — harness §23) — on download failure, missing
+digest, missing hash tool, or mismatch. Local/cached copies are operator-trusted and skip
 verification. Pins: `config/bootstrap-checksums.txt` (source of truth, now
 pinning all three entry points **including the anchor itself**) with the
 dev/apps values embedded in the script (it must stay self-contained for

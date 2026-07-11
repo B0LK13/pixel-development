@@ -862,6 +862,67 @@ if grep -q 'exit "$2"' "$CIL" && grep -q 'cd "$ROOT"' "$CIL"; then
   t_ok "ci-local.sh preserves failing step exit status and cds to repo root"
 else t_fail "ci-local.sh shape" "fail-fast/root handling regressed"; fi
 
+# --- 23. session-5 security invariants (bootstrap trust + lifecycle) --------------
+# 23a. SIGTERM mid-download exits through the EXIT trap, so the temp dir is
+#      removed (invariant 9). A stub curl sleeps; only the bootstrap PID is
+#      signalled — bash runs the pending trap when the child exits, and the
+#      EXIT trap cleans up. No process-group signalling (fragile under job
+#      control), so this is deterministic everywhere.
+mkdir -p "$tmp/slowbin"
+printf '#!/usr/bin/env bash\nsleep 3\n' > "$tmp/slowbin/curl"; chmod +x "$tmp/slowbin/curl"
+sigh="$(mktemp -d "${tmp}/sig home.XXXXXX")"
+env HOME="$sigh" PREFIX="$sigh/prefix" PATH="$tmp/slowbin:$APATH" \
+  bash "$ROOT/pixel-bootstrap.sh" --repo-base="file:///tmp/none" >/dev/null 2>&1 &
+sigpid=$!
+sleep 1
+kill -TERM $sigpid 2>/dev/null
+sigok=0
+for _ in $(seq 1 40); do
+  if ! kill -0 $sigpid 2>/dev/null && [ "$(dl_leftovers)" -eq 0 ]; then sigok=1; break; fi
+  sleep 0.25
+done
+kill -KILL $sigpid 2>/dev/null || true
+if [ "$sigok" = 1 ]; then
+  t_ok "SIGTERM mid-download: bootstrap exits and temp download dir is cleaned"
+else
+  t_fail "signal cleanup" "process/temp survived SIGTERM"
+fi
+# static half: both signal traps route through exit (which runs the EXIT trap)
+if [ "$(grep -cE "trap 'exit 1(30|43)' (INT|TERM)" "$ROOT/pixel-bootstrap.sh")" -eq 2 ]; then
+  t_ok "INT/TERM traps route through the EXIT trap (cleanup on signals)"
+else
+  t_fail "signal traps" "expected INT+TERM traps in pixel-bootstrap.sh"
+fi
+
+# 23b. installed setup scripts are executable and not overly permissive (inv. 10)
+run_boot bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")"
+perm="$(stat -c %a "$BOOT_DEST/pixel-dev-setup.sh" 2>/dev/null)"
+perm2="$(stat -c %a "$BOOT_DEST/pixel-apps-setup.sh" 2>/dev/null)"
+if [ $rc -eq 0 ] && [ -x "$BOOT_DEST/pixel-dev-setup.sh" ] && [ -x "$BOOT_DEST/pixel-apps-setup.sh" ] \
+   && [ "$perm" -le 755 ] && [ "$perm2" -le 755 ]; then
+  t_ok "installed scripts are executable with deliberate permissions ($perm/$perm2)"
+else
+  t_fail "installed permissions" "rc=$rc perm=$perm/$perm2"
+fi
+
+# 23c. redirects cannot bypass verification: the digest is computed AFTER the
+#      download returns, so a redirect to wrong content fails closed like any
+#      other mismatch (proven functionally by 17b; this pins the code order).
+curl_ln="$(grep -n 'curl -fsSL -o "\$DLTMP/\$s"' "$ROOT/pixel-bootstrap.sh" | cut -d: -f1)"
+ver_ln="$(grep -n 'sha256_of "\$DLTMP/\$s"' "$ROOT/pixel-bootstrap.sh" | cut -d: -f1)"
+if [ -n "$curl_ln" ] && [ -n "$ver_ln" ] && [ "$ver_ln" -gt "$curl_ln" ]; then
+  t_ok "download-then-verify order pinned (redirect-safe by construction)"
+else
+  t_fail "verify order" "curl=$curl_ln verify=$ver_ln"
+fi
+
+# 23d. the shipped state passes its own CI checksum gate (invariant 14, local half)
+if bash "$ROOT/scripts/update-bootstrap-checksums.sh" --check >/dev/null 2>&1; then
+  t_ok "shipped manifest passes its own checksum gate"
+else
+  t_fail "checksum gate self-check" "manifest stale in the shipped tree"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"

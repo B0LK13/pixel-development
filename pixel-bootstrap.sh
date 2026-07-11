@@ -52,6 +52,8 @@ have(){ command -v "$1" >/dev/null 2>&1; }
 # ---------------------------------------------------------------------------
 DLTMP="$(mktemp -d "${TMPDIR:-/tmp}/pixel-dl.XXXXXX")"
 trap 'rm -rf "$DLTMP"' EXIT
+trap 'exit 130' INT    # route signals through the EXIT trap → temp cleanup
+trap 'exit 143' TERM
 
 expected_sha256(){ # $1 script name → prints pinned sha256; rc 1 if no entry
   if [ -n "${PIXEL_BOOTSTRAP_CHECKSUM_FILE:-}" ]; then   # test/maintenance seam
