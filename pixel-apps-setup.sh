@@ -13,7 +13,7 @@
 #                                                                             #
 #  Pairs with: pixel-dev-setup.sh (the dev/AI toolchain).                     #
 #  Usage: bash pixel-apps-setup.sh [--open-stores] [--with-tailscale-cli]     #
-#                                  [--ssh-port N] [--no-font] [--yes] [-h]    #
+#                                  [--ssh-port=N] [--no-font] [--yes] [-h]    #
 ###############################################################################
 set -uo pipefail
 
