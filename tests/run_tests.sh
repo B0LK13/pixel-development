@@ -350,6 +350,32 @@ else
   t_fail "validation-before-state" "rc=$rc contents=$(ls -A "$ws12")"
 fi
 
+# --- 11. --agent enum contract (pixel-autodev.sh) --------------------------------
+# 11a. values outside {claude, codex} are usage errors (exit 2, flag named on
+#      stderr) BEFORE preflight — an unknown name can never reach command
+#      lookup or dispatch. Matrix: unknown / empty / wrong case / lookalike /
+#      shell metacharacters / whitespace.
+for v in foo "" CLAUDE Claude claude2 "claude;rm" "claude "; do
+  err="$(bash "$ROOT/pixel-autodev.sh" --agent="$v" --workspace=/nonexistent-pixel-ws 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 2 ] && case "$err" in *"--agent"*) true;; *) false;; esac; then
+    t_ok "rejects invalid --agent='$v' (exit 2 before preflight, stderr names flag)"
+  else
+    t_fail "invalid --agent='$v'" "rc=$rc stderr=$err"
+  fi
+done
+
+# 11b. both enumerated backends are accepted (dry-run, stub agents on PATH)
+for v in claude codex; do
+  out="$(PATH="$APATH" bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$ws10" --agent="$v" 2>&1)"; rc=$?
+  if [ $rc -eq 0 ]; then t_ok "accepts --agent=$v"; else t_fail "--agent=$v" "rc=$rc"$'\n'"$out"; fi
+done
+
+# 11c. duplicate --agent: last wins, final value is the one validated
+out="$(PATH="$APATH" bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$ws10" --agent=foo --agent=claude 2>&1)"; rc=$?
+if [ $rc -eq 0 ]; then t_ok "duplicate --agent: later valid overrides earlier invalid"; else t_fail "duplicate --agent valid-last" "rc=$rc"; fi
+bash "$ROOT/pixel-autodev.sh" --agent=claude --agent=foo --workspace=/nonexistent-pixel-ws >/dev/null 2>&1; rc=$?
+if [ $rc -eq 2 ]; then t_ok "duplicate --agent: later invalid rejected (last-wins validated)"; else t_fail "duplicate --agent invalid-last" "rc=$rc"; fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
