@@ -1,15 +1,29 @@
 name: tests
 
 # Runs the repo's own verification gate (tests/run_tests.sh) — the same
-# command the autodev runner reads from .pixel-lab.json.
+# command the autodev runner reads from .pixel-lab.json. Local tests only:
+# no agents, no secrets, no pushes, no repository mutation.
 on:
   push:
     branches: [main, 'auto/*']
   pull_request:
 
+# least privilege: the suite only reads the checked-out tree
+permissions:
+  contents: read
+
+# one run per ref at a time; a new push cancels the stale one
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   suite:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Install shellcheck
