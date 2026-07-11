@@ -42,7 +42,7 @@ fi
 echo "== pixel-development test suite =="
 
 # --- 0. Required files --------------------------------------------------------
-for f in "${SCRIPTS[@]}" scripts/verify-bootstrap-signature.sh scripts/update-bootstrap-checksums.sh scripts/ci-local.sh config/bootstrap-checksums.txt .pixel-lab.json; do
+for f in "${SCRIPTS[@]}" scripts/verify-bootstrap-signature.sh scripts/update-bootstrap-checksums.sh scripts/ci-local.sh scripts/build-release-candidate.sh config/bootstrap-checksums.txt .pixel-lab.json; do
   if [ -f "$f" ]; then t_ok "required file present: $f"; else t_fail "required file missing: $f"; fi
 done
 
@@ -942,6 +942,240 @@ if bash "$ROOT/scripts/update-bootstrap-checksums.sh" --check >/dev/null 2>&1; t
   t_ok "shipped manifest passes its own checksum gate"
 else
   t_fail "checksum gate self-check" "manifest stale in the shipped tree"
+fi
+
+# --- 24. release candidate builder (scripts/build-release-candidate.sh) --------
+# Hermetic fixtures: throwaway clones of this repo with the current builder
+# copied in and fixture-committed (the builder requires a clean tree).
+mk_rc_clone(){ # $1 = destination clone dir
+  local dst="$1"
+  git clone -q "$ROOT" "$dst" 2>/dev/null || return 1
+  cp "$ROOT/scripts/build-release-candidate.sh" "$dst/scripts/"
+  git -C "$dst" config user.name t; git -C "$dst" config user.email t@t
+  # fixtures never sign: the host's global commit.gpgsign must not leak in
+  git -C "$dst" config commit.gpgsign false
+  git -C "$dst" add -A && git -C "$dst" commit -qm fixture >/dev/null
+}
+rcrun(){ # $1 = clone dir; rest = builder args → sets rc + rcout (no pipe)
+  local d="$1"; shift
+  rcout="$(bash "$d/scripts/build-release-candidate.sh" "$@" 2>&1)"; rc=$?
+}
+
+rcroot="$tmp/rc"; mkdir -p "$rcroot"
+if mk_rc_clone "$rcroot/repo"; then
+  # 24a. happy path: exact 9-file layout
+  rcrun "$rcroot/repo" --version=1.0.0 --output-dir="$rcroot/out"
+  b="$rcroot/out/pixel-development-1.0.0"
+  want="./INSTALL.md ./RELEASE-METADATA.json ./SHA256SUMS ./SIGNING-MANIFEST.json ./VERIFY.md ./bootstrap-checksums.txt ./pixel-apps-setup.sh ./pixel-bootstrap.sh ./pixel-dev-setup.sh "
+  if [ "$rc" -eq 0 ] && got="$(cd "$b" && find . -type f | sort | tr '\n' ' ')" && [ "$got" = "$want" ]; then
+    t_ok "rc build: exact 9-file bundle layout"
+  else
+    t_fail "rc layout" "rc=$rc got: ${got:-none} -- $rcout"
+  fi
+
+  # 24b. deliberate modes: 0755 scripts, 0644 data/docs
+  if [ "$rc" -eq 0 ] \
+     && [ "$(stat -c %a "$b/pixel-bootstrap.sh")" = 755 ] \
+     && [ "$(stat -c %a "$b/pixel-apps-setup.sh")" = 755 ] \
+     && [ "$(stat -c %a "$b/bootstrap-checksums.txt")" = 644 ] \
+     && [ "$(stat -c %a "$b/RELEASE-METADATA.json")" = 644 ]; then
+    t_ok "rc build: deliberate modes (755 scripts / 644 data)"
+  else
+    t_fail "rc modes" "rc=$rc"
+  fi
+
+  # 24c. RELEASE-METADATA.json schema fields
+  meta="$b/RELEASE-METADATA.json"
+  if [ "$rc" -eq 0 ] \
+     && grep -q '^  "schema_version": "1.0",$' "$meta" \
+     && grep -q '^  "project": "pixel-development",$' "$meta" \
+     && grep -q '^  "version": "1.0.0",$' "$meta" \
+     && grep -qE '^  "commit": "[0-9a-f]{40}",$' "$meta" \
+     && grep -qE '^  "created_at": "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",$' "$meta" \
+     && grep -q '^  "bootstrap_entrypoint": "pixel-bootstrap.sh",$' "$meta" \
+     && grep -q '^  "checksum_algorithm": "sha256",$' "$meta" \
+     && grep -q '^  "signature_algorithm": "openpgp-detached",$' "$meta" \
+     && grep -q '^  "signature_required": false,$' "$meta"; then
+    t_ok "rc metadata: schema fields valid (semver, full commit, sha256, openpgp-detached)"
+  else
+    t_fail "rc metadata schema" "see $meta"
+  fi
+
+  # 24d. artifacts array: sorted, digests match files, modes/roles consistent
+  if [ "$rc" -eq 0 ]; then
+    order="$(grep -oE '"path": "[^"]+"' "$meta" | sed 's/"path": "//;s/"$//' | tr '\n' ' ')"
+    okdig=1
+    for p in bootstrap-checksums.txt pixel-apps-setup.sh pixel-bootstrap.sh pixel-dev-setup.sh; do
+      line="$(grep -F "\"path\": \"$p\"" "$meta")"
+      dig="$(printf '%s' "$line" | grep -oE '[0-9a-f]{64}')"
+      [ "$dig" = "$(sha256sum "$b/$p" | awk '{print $1}')" ] || okdig=0
+    done
+    bm="$(grep -F '"path": "pixel-bootstrap.sh"' "$meta" | grep -oE '"mode": "[0-9]+"' | grep -oE '[0-9]+')"
+    br="$(grep -F '"path": "pixel-bootstrap.sh"' "$meta" | grep -oE '"role": "[a-z-]+"' | sed 's/.*: "//;s/"//')"
+    if [ "$order" = "bootstrap-checksums.txt pixel-apps-setup.sh pixel-bootstrap.sh pixel-dev-setup.sh " ] \
+       && [ "$okdig" = 1 ] && [ "$bm" = 0755 ] && [ "$br" = bootstrap ]; then
+      t_ok "rc metadata: artifacts sorted, digests match files, mode/role consistent"
+    else
+      t_fail "rc metadata artifacts" "order=$order okdig=$okdig mode=$bm role=$br"
+    fi
+  else
+    t_fail "rc metadata artifacts" "build failed"
+  fi
+
+  # 24e. SIGNING-MANIFEST.json binds metadata digest + artifact hashes
+  sman="$b/SIGNING-MANIFEST.json"
+  if [ "$rc" -eq 0 ]; then
+    md="$(grep -E '^  "release_metadata_sha256": "[0-9a-f]{64}",$' "$sman" | grep -oE '[0-9a-f]{64}')"
+    okbind=1
+    [ "$md" = "$(sha256sum "$meta" | awk '{print $1}')" ] || okbind=0
+    for p in bootstrap-checksums.txt pixel-apps-setup.sh pixel-bootstrap.sh pixel-dev-setup.sh; do
+      dig="$(grep -F "\"path\": \"$p\"" "$sman" | grep -oE '[0-9a-f]{64}')"
+      [ "$dig" = "$(sha256sum "$b/$p" | awk '{print $1}')" ] || okbind=0
+    done
+    if [ "$okbind" = 1 ] \
+       && grep -q '^  "schema_version": "1.0",$' "$sman" \
+       && grep -q '^  "signature_algorithm": "openpgp-detached",$' "$sman" \
+       && grep -q '^  "expected_signature": "SIGNING-MANIFEST.json.asc",$' "$sman" \
+       && grep -qE '^  "commit": "[0-9a-f]{40}",$' "$sman" \
+       && grep -q '^  "version": "1.0.0",$' "$sman"; then
+      t_ok "rc signing manifest: binds commit+version+metadata digest+artifact hashes"
+    else
+      t_fail "rc signing manifest" "okbind=$okbind"
+    fi
+  else
+    t_fail "rc signing manifest" "build failed"
+  fi
+
+  # 24f. SHA256SUMS verifies with sha256sum -c
+  if [ "$rc" -eq 0 ] && (cd "$b" && sha256sum -c SHA256SUMS >/dev/null 2>&1); then
+    t_ok "rc SHA256SUMS verifies against bundle files"
+  else
+    t_fail "rc SHA256SUMS" "rc=$rc"
+  fi
+
+  # 24g. INSTALL.md: immutable commit URL + pinned digest, no pipe-to-shell
+  im="$b/INSTALL.md"
+  if [ "$rc" -eq 0 ] \
+     && grep -q "raw.githubusercontent.com/B0LK13/pixel-development/[0-9a-f]\{40\}/pixel-bootstrap.sh" "$im" \
+     && grep -q "$(sha256sum "$b/pixel-bootstrap.sh" | awk '{print $1}')" "$im" \
+     && grep -q "PIXEL_REPO_BASE=\"https://raw.githubusercontent.com/B0LK13/pixel-development/[0-9a-f]\{40\}\"" "$im" \
+     && ! grep -qE '\|[[:space:]]*(bash|sh)\b' "$im"; then
+    t_ok "rc INSTALL.md: commit-pinned verified flow, digest matches, no pipe-to-shell"
+  else
+    t_fail "rc INSTALL.md" "rc=$rc"
+  fi
+
+  # 24h. VERIFY.md: integrity-only labelled as non-authentic + signed path shown
+  vm="$b/VERIFY.md"
+  if [ "$rc" -eq 0 ] \
+     && grep -q 'verified-integrity-only' "$vm" \
+     && grep -q 'verified-signed' "$vm" \
+     && grep -q -- '--require-signature' "$vm" \
+     && grep -qi 'NOT authorship' "$vm"; then
+    t_ok "rc VERIFY.md: integrity-only labelled, signed path + policy shown"
+  else
+    t_fail "rc VERIFY.md" "rc=$rc"
+  fi
+
+  # 24i. malformed versions are usage errors (exit 2), before any side effect
+  for v in "1.0" "abc" "1.0.0.0" "" "1.0.x" "v1.0.0"; do
+    rcrun "$rcroot/repo" --version="$v" --output-dir="$rcroot/out-$v"
+    if [ "$rc" -eq 2 ] && [ ! -e "$rcroot/out-$v" ]; then
+      t_ok "rc usage: malformed version '$v' exits 2 with no output"
+    else
+      t_fail "rc version '$v'" "rc=$rc out=$rcout"
+    fi
+  done
+
+  # 24j/24k. missing --version / unknown flag → exit 2
+  rcrun "$rcroot/repo" --output-dir="$rcroot/out-nov"
+  [ "$rc" -eq 2 ] && t_ok "rc usage: missing --version exits 2" || t_fail "rc missing version" "rc=$rc"
+  rcrun "$rcroot/repo" --version=1.0.0 --frobnicate
+  [ "$rc" -eq 2 ] && t_ok "rc usage: unknown flag exits 2" || t_fail "rc unknown flag" "rc=$rc"
+
+  # 24l. dirty tree → exit 1, no bundle, no temp leftovers
+  if mk_rc_clone "$rcroot/dirty"; then
+    echo wip > "$rcroot/dirty/SCRATCH.txt"
+    rcrun "$rcroot/dirty" --version=9.9.9 --output-dir="$rcroot/out-dirty"
+    leftovers="$(find "$rcroot" -maxdepth 3 -name '.pixel-development-*.tmp.*' 2>/dev/null)"
+    if [ "$rc" -eq 1 ] && [ ! -e "$rcroot/out-dirty" ] && [ -z "$leftovers" ]; then
+      t_ok "rc: dirty tree rejected (exit 1, no bundle, no temp leftovers)"
+    else
+      t_fail "rc dirty tree" "rc=$rc $rcout"
+    fi
+  else
+    t_fail "rc dirty tree" "clone failed"
+  fi
+
+  # 24m. stale checksum manifest → exit 1 atomically
+  if mk_rc_clone "$rcroot/stale"; then
+    printf '# drift\n' >> "$rcroot/stale/pixel-dev-setup.sh"
+    git -C "$rcroot/stale" commit -qam drift >/dev/null
+    rcrun "$rcroot/stale" --version=9.9.9 --output-dir="$rcroot/out-stale"
+    if [ "$rc" -eq 1 ] && [ ! -e "$rcroot/out-stale" ] && printf '%s' "$rcout" | grep -qi 'lockstep'; then
+      t_ok "rc: stale checksum manifest rejected atomically (exit 1, no bundle)"
+    else
+      t_fail "rc stale manifest" "rc=$rc $rcout"
+    fi
+  else
+    t_fail "rc stale manifest" "clone failed"
+  fi
+
+  # 24n. missing artifact → exit 1
+  if mk_rc_clone "$rcroot/missing"; then
+    git -C "$rcroot/missing" rm -q pixel-apps-setup.sh >/dev/null
+    git -C "$rcroot/missing" commit -qm drop >/dev/null
+    rcrun "$rcroot/missing" --version=9.9.9 --output-dir="$rcroot/out-missing"
+    [ "$rc" -eq 1 ] && [ ! -e "$rcroot/out-missing" ] \
+      && t_ok "rc: missing artifact rejected (exit 1)" \
+      || t_fail "rc missing artifact" "rc=$rc $rcout"
+  else
+    t_fail "rc missing artifact" "clone failed"
+  fi
+
+  # 24o. symlink artifact → exit 1
+  if mk_rc_clone "$rcroot/sym"; then
+    rm "$rcroot/sym/pixel-apps-setup.sh"
+    ln -s pixel-bootstrap.sh "$rcroot/sym/pixel-apps-setup.sh"
+    git -C "$rcroot/sym" add -A && git -C "$rcroot/sym" commit -qm symlink >/dev/null
+    rcrun "$rcroot/sym" --version=9.9.9 --output-dir="$rcroot/out-sym"
+    [ "$rc" -eq 1 ] && [ ! -e "$rcroot/out-sym" ] \
+      && t_ok "rc: symlink artifact rejected (exit 1)" \
+      || t_fail "rc symlink artifact" "rc=$rc $rcout"
+  else
+    t_fail "rc symlink artifact" "clone failed"
+  fi
+
+  # 24p. pre-existing output dir → exit 1 (no clobber)
+  mkdir -p "$rcroot/out-exists/pixel-development-1.0.0"
+  rcrun "$rcroot/repo" --version=1.0.0 --output-dir="$rcroot/out-exists"
+  [ "$rc" -eq 1 ] && [ -z "$(ls -A "$rcroot/out-exists/pixel-development-1.0.0")" ] \
+    && t_ok "rc: existing output dir rejected without clobber (exit 1)" \
+    || t_fail "rc output exists" "rc=$rc $rcout"
+
+  # 24q. --check validates and writes nothing
+  rcrun "$rcroot/repo" --version=1.0.0 --check --output-dir="$rcroot/out-check"
+  [ "$rc" -eq 0 ] && [ ! -e "$rcroot/out-check" ] && printf '%s' "$rcout" | grep -q 'check mode' \
+    && t_ok "rc --check: validates, exits 0, writes nothing" \
+    || t_fail "rc --check" "rc=$rc $rcout"
+
+  # 24r. SOURCE_DATE_EPOCH pins created_at
+  rcout="$(SOURCE_DATE_EPOCH=1700000000 bash "$rcroot/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$rcroot/out-sde" 2>&1)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -q '"created_at": "2023-11-14T22:13:20Z"' "$rcroot/out-sde/pixel-development-1.0.0/RELEASE-METADATA.json"; then
+    t_ok "rc: SOURCE_DATE_EPOCH pins created_at deterministically"
+  else
+    t_fail "rc SOURCE_DATE_EPOCH" "rc=$rc $rcout"
+  fi
+
+  # 24s. no host paths leak into the bundle
+  if [ "$rc" -eq 0 ] && ! grep -rF "$rcroot" "$rcroot/out-sde/pixel-development-1.0.0" >/dev/null 2>&1 \
+     && ! grep -rF "$ROOT" "$rcroot/out-sde/pixel-development-1.0.0" >/dev/null 2>&1; then
+    t_ok "rc: bundle contains no absolute host paths"
+  else
+    t_fail "rc host-path leak" "found repo paths in bundle"
+  fi
+else
+  t_fail "release candidate fixtures" "could not clone repo into \$tmp"
 fi
 
 # --- summary ---------------------------------------------------------------------
