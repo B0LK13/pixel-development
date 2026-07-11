@@ -1,0 +1,82 @@
+Test-suite performance budget — session 5
+=========================================
+Measured on: auto/session-5-perf-timings (199 tests), this host.
+Method:
+  - per-test: PIXEL_TEST_TIMINGS=1 bash tests/run_tests.sh 2>timings.raw
+    (opt-in profiler added this session; default run produces no timing
+    output and is byte-identical to before)
+  - wall: time bash tests/run_tests.sh / time PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh
+  - bucket attribution by test-name pattern (±2s); timings vary ±5% run to run
+
+Wall clock
+----------
+  full suite (199 tests):            3m31s
+  outer only (PIXEL_TESTS_NO_CLONE): 1m50s
+  nested clean-clone run (marginal): ~101s   ≈ 48% of the suite
+
+Per-test sum (outer run, 199 tests): ~216s accounted (includes fixture setup
+between tests, which the profiler charges to the following test).
+
+Cost buckets (outer run)
+------------------------
+  §8  clean-clone smoke (nested full suite)        109s   1 test
+  autodev end-to-end cluster (§5/§6/§10/§13/§15):   51s  19 tests
+      real git fixtures + stub-agent dispatch + genuine timeout(1) kills
+  §17+§23 bootstrap download/security matrix:       ~20s  30 tests
+      (temp downloads, fail-closed paths, SIGTERM cleanup, perms)
+  §20 checksum lifecycle tool:                      15s  15 tests
+      (fixture repos + clean-clone of the tool: 3s)
+  §19 signature fixtures (2× ephemeral gpg keygen):  2s  10 tests
+  everything else (contract/static/lint gates):     ~19s 124 tests
+      §0/§1/§2 (now covering all 8 tracked shell scripts), §3, §4, §7,
+      §9, §10 input matrix, §11, §12, §14, §16, §18, §21, §22
+
+Slowest individual tests
+------------------------
+  109s  clean-clone smoke: suite passes from a fresh clone
+    7s  codex backend: 1s timeout kills stub, branch reverted, task stays open
+    7s  --max-tasks=08 canonicalised to 8 (octal-safe loop bound)
+    6s  claude backend: 1s timeout kills stub, branch reverted, task stays open
+    5s  success path: stub agent committed on green, backlog flipped
+    5s  non-dry-run resolves the agent in preflight (dispatch stays stub-pinned)
+    4s  policy line shows timeout=1200s
+    4s  bare-name override resolves through PATH; dispatch runs the stub
+    3s  checksum tool: --check passes from a clean clone
+    3s  autodev --dry-run parses task and slugifies branch
+    3s  --timeout=08 accepted (leading zeros tolerated, no octal trap)
+    2s  shellcheck: tests/run_tests.sh
+    2s  path override resolves (/bin/true as timeout)
+    2s  installed scripts are executable with deliberate permissions
+    2s  checksum tool: deterministic sorted order; second --write changes nothing
+
+Findings
+--------
+1. Duplicate clean-clone work: the §8 nested run re-executes the ENTIRE
+   suite inside the clone (109s ≈ half the suite). This is by design: it is
+   the hermetic proof that a fresh clone is self-verifying. Removing or
+   thinning it would remove the proof, so it is KEPT (charter: do not remove
+   the clean-clone proof). PIXEL_TESTS_NO_CLONE=1 remains the documented
+   fast path for iteration (1m50s).
+2. No unnecessary sleeps: the only deliberate waits are the §23 signal-test
+   stub (sleep 3, bounded by a 10s poll) and genuine 1s timeout(1) kills,
+   which are the behaviour under test.
+3. No repeated lint passes: bash -n and shellcheck each run once per file.
+   Gap closed this session: §1/§2 previously linted only the 4 root scripts +
+   harness; they now cover all 8 tracked shell scripts (scripts/*.sh were
+   previously only linted via ci-local.sh). Cost: ~1-2s; value: real.
+4. Repeated fixture setup: each autodev e2e test builds its own git
+   workspace (~0.4s × ~15). A shared template+cp could save ~5-8s but would
+   touch plumbing used by 19 tests for a ~4% suite win — rejected on
+   risk/reward (correctness takes priority).
+5. External command overhead: gpg keygen (2×) is the only >1s tool startup;
+   already minimal (ed25519, no passphrase).
+
+Before/after
+------------
+  session-4 tip: 146 tests, ~2m45s
+  session-5:     199 tests,  3m31s  (+53 tests, all real coverage; no
+                 optimization removed anything; the only structural cost is
+                 the chartered nested clone proof)
+Decision: no optimizations applied. Correctness and coverage took priority;
+the budget is documented and the fast iteration path
+(PIXEL_TESTS_NO_CLONE=1) is preserved.

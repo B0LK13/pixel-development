@@ -18,29 +18,50 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || { echo "cannot cd to repo root: $ROOT" >&2; exit 1; }
 
 PASS=0; FAIL=0; SKIP=0
-t_ok(){   PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; }
-t_fail(){ FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | head -20 | sed 's/^/        /'; }
-t_skip(){ SKIP=$((SKIP+1)); printf '  skip  %s\n' "$1"; }
+# Optional per-test profiler (session 5): PIXEL_TEST_TIMINGS=1 prints elapsed
+# seconds since the previous test to stderr. Default behaviour is untouched.
+if [ "${PIXEL_TEST_TIMINGS:-0}" = 1 ]; then
+  _tt_last=$SECONDS
+  _tt_mark(){ local now=$SECONDS; printf 'TIMING %4ds  %s\n' "$((now-_tt_last))" "$1" >&2; _tt_last=$now; }
+else
+  _tt_mark(){ :; }
+fi
+t_ok(){   PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; _tt_mark "$1"; }
+t_fail(){ FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | head -20 | sed 's/^/        /'; _tt_mark "FAIL $1"; }
+t_skip(){ SKIP=$((SKIP+1)); printf '  skip  %s\n' "$1"; _tt_mark "skip $1"; }
 
 SCRIPTS=(pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh)
+
+# Every tracked shell script (for syntax/lint gates). Heredoc-fed, not
+# process substitution — /dev/fd is absent on some supported environments.
+lint_files="$(git ls-files '*.sh' 2>/dev/null)" || lint_files=
+if [ -z "$lint_files" ]; then
+  lint_files="$(printf '%s\n' pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh tests/run_tests.sh)"
+fi
 
 echo "== pixel-development test suite =="
 
 # --- 0. Required files --------------------------------------------------------
-for f in "${SCRIPTS[@]}" .pixel-lab.json; do
+for f in "${SCRIPTS[@]}" scripts/verify-bootstrap-signature.sh scripts/update-bootstrap-checksums.sh scripts/ci-local.sh config/bootstrap-checksums.txt .pixel-lab.json; do
   if [ -f "$f" ]; then t_ok "required file present: $f"; else t_fail "required file missing: $f"; fi
 done
 
-# --- 1. Syntax ----------------------------------------------------------------
-for s in "${SCRIPTS[@]}"; do
+# --- 1. Syntax (every tracked shell script) ------------------------------------
+while IFS= read -r s; do
+  [ -n "$s" ] || continue
   if err="$(bash -n "$s" 2>&1)"; then t_ok "syntax: $s"; else t_fail "syntax: $s" "$err"; fi
-done
+done <<EOF
+$lint_files
+EOF
 
-# --- 2. Shellcheck (severity warning and up), including this harness -----------
+# --- 2. Shellcheck (severity warning and up), every tracked shell script -------
 if command -v shellcheck >/dev/null 2>&1; then
-  for s in "${SCRIPTS[@]}" tests/run_tests.sh; do
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
     if out="$(shellcheck -S warning "$s" 2>&1)"; then t_ok "shellcheck: $s"; else t_fail "shellcheck: $s" "$out"; fi
-  done
+  done <<EOF
+$lint_files
+EOF
 else
   t_skip "shellcheck not installed — lint gate skipped (pkg install shellcheck)"
 fi
