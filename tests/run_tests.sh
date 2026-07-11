@@ -275,6 +275,81 @@ else
   fi
 fi
 
+# --- 10. numeric flag contract (pixel-autodev.sh) --------------------------------
+# 10a-c. malformed values are usage errors (exit 2, flag named on stderr) BEFORE
+#        preflight — proven by a workspace that does not exist (preflight would
+#        die exit 1 there). Matrix covers zero / negative / non-numeric / empty /
+#        whitespace / shell metacharacters per flag.
+badnum(){ # $1 flag  $2 value
+  err="$(bash "$ROOT/pixel-autodev.sh" "$1=$2" --workspace=/nonexistent-pixel-ws 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 2 ] && case "$err" in *"$1"*) true;; *) false;; esac; then
+    t_ok "rejects invalid $1='$2' (exit 2 before preflight, stderr names flag)"
+  else
+    t_fail "invalid $1='$2'" "rc=$rc stderr=$err"
+  fi
+}
+for v in 0 -1 abc "" " 3" "3;rm" 1000000; do badnum --max-tasks "$v"; done
+for v in 0 -5 abc "" "1x";        do badnum --max-turns "$v"; done
+for v in "" abc -1 0 0.00 1.2.3 .5 2. "1;rm"; do badnum --budget "$v"; done
+badnum --timeout 000   # all-zeros: not positive
+
+# 10d. octal/overflow edge: leading zeros are TOLERATED (documented --timeout
+#      convention) — "08" must not trip shell arithmetic. Pass-through unchanged.
+ws10="$tmp/ws10"; mk_ws "$ws10"
+printf -- '- [ ] Placeholder numeric-resolution task\n' > "$ws10/BACKLOG.md"
+git -C "$ws10" add -A && git -C "$ws10" commit -qm task >/dev/null
+out="$(PATH="$APATH" bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$ws10" --timeout=08 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"timeout=08s"*) true;; *) false;; esac; then
+  t_ok "--timeout=08 accepted (leading zeros tolerated, no octal trap)"
+else
+  t_fail "--timeout=08" "rc=$rc"$'\n'"$out"
+fi
+
+# 10e. valid values resolve and are observable in the dry-run policy line
+check_policy10(){ # $1 expected substring, rest = flags
+  local want="$1"; shift
+  out="$(PATH="$APATH" bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$ws10" "$@" 2>&1)"; rc=$?
+  if [ $rc -eq 0 ] && case "$out" in *"$want"*) true;; *) false;; esac; then
+    t_ok "policy line shows $want"
+  else
+    t_fail "policy line must show $want" "rc=$rc"$'\n'"$out"
+  fi
+}
+check_policy10 "max-turns=7"          --max-turns=7
+check_policy10 "max-turns=7"          --max-turns=5 --max-turns=7   # duplicate: last wins
+check_policy10 'budget/task=$0.50'    --budget=0.50
+check_policy10 'budget/task=$2.00'    --budget=2.00
+check_policy10 'budget/task=$10'      --budget=10
+check_policy10 "max-turns=030"        --max-turns=030               # leading zeros pass through
+
+# 10f. --max-tasks drives the loop bound — canonicalised so "08" is 8, not an
+#      octal error. 10 open tasks + --max-tasks=08 → works exactly 8.
+ws11="$tmp/ws11"; mk_ws "$ws11"
+for i in 1 2 3 4 5 6 7 8 9 10; do printf -- '- [ ] task %s\n' "$i"; done > "$ws11/BACKLOG.md"
+git -C "$ws11" add -A && git -C "$ws11" commit -qm tasks >/dev/null
+out="$(PATH="$APATH" bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$ws11" --max-tasks=08 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"Working up to 8 task(s)"*) true;; *) false;; esac; then
+  t_ok "--max-tasks=08 canonicalised to 8 (octal-safe loop bound)"
+else
+  t_fail "--max-tasks=08" "rc=$rc"$'\n'"$out"
+fi
+out="$(PATH="$APATH" bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$ws11" --max-tasks=9 --max-tasks=1 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"Working up to 1 task(s)"*) true;; *) false;; esac; then
+  t_ok "duplicate --max-tasks: last wins (9 then 1 → 1)"
+else
+  t_fail "duplicate --max-tasks" "rc=$rc"$'\n'"$out"
+fi
+
+# 10g. validation precedes state creation: existing but EMPTY workspace must
+#      stay empty (no .autodev, no seeded BACKLOG/charter) on a usage error.
+ws12="$tmp/ws12"; mkdir -p "$ws12"
+bash "$ROOT/pixel-autodev.sh" --max-tasks=0 --workspace="$ws12" >/dev/null 2>&1; rc=$?
+if [ $rc -eq 2 ] && [ -z "$(ls -A "$ws12")" ]; then
+  t_ok "invalid --max-tasks creates no .autodev state and seeds nothing"
+else
+  t_fail "validation-before-state" "rc=$rc contents=$(ls -A "$ws12")"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
