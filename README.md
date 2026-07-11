@@ -185,6 +185,8 @@ pixel-development/
 ├─ pixel-dev-setup.sh
 ├─ pixel-apps-setup.sh
 ├─ pixel-autodev.sh
+├─ tests/run_tests.sh   ← verification gate (syntax, shellcheck, dry-run behaviour)
+├─ .pixel-lab.json      ← stack metadata the autodev runner reads for the test command
 ├─ KICKSTART.md
 ├─ README.md
 ├─ LICENSE
@@ -192,6 +194,8 @@ pixel-development/
 ```
 
 Keep the scripts at the repo **root** so the `curl | bash` raw URLs resolve.
+Run the suite yourself with `bash tests/run_tests.sh` — the autodev runner picks
+the same command up from `.pixel-lab.json` when it works tasks in this repo.
 
 ---
 

@@ -1,0 +1,6 @@
+{
+  "name": "pixel-development",
+  "stack": "bash",
+  "entry": "pixel-bootstrap.sh",
+  "test": "bash tests/run_tests.sh"
+}
