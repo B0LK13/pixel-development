@@ -834,6 +834,34 @@ else
   t_fail "release doc missing rollback/ownership sections"
 fi
 
+# --- 22. CI parity (workflow vs scripts/ci-local.sh, static) ----------------------
+# Guards against silent drift between GitHub Actions and the local parity
+# command. The essential gate commands must exist in BOTH places.
+WF="$ROOT/.github/workflows/test.yml"
+CIL="$ROOT/scripts/ci-local.sh"
+if ! grep -q "$(printf '\t')" "$WF" && grep -q 'contents: read' "$WF"; then
+  t_ok "workflow: valid-YAML hygiene (no tabs), least-privilege permissions"
+else t_fail "workflow hygiene" "tabs or permissions regressed"; fi
+for gate in 'git diff --check' 'bash scripts/update-bootstrap-checksums.sh --check' 'bash tests/run_tests.sh'; do
+  if grep -qF "run: $gate" "$WF" && grep -qF "$gate" "$CIL"; then
+    t_ok "CI parity: gate in workflow AND ci-local.sh: $gate"
+  else
+    t_fail "CI parity drift" "$gate missing in workflow or ci-local.sh"
+  fi
+done
+if grep -qF "branches: [main, 'auto/*']" "$WF"; then
+  t_ok "workflow triggers cover main + auto/* integration branches"
+else t_fail "workflow triggers" "branch pattern changed"; fi
+if grep -qE '\$\{\{ *secrets\.' "$WF" || grep -qE '\b(claude|codex)( |$)' "$WF"; then
+  t_fail "workflow references a paid agent or a secret"
+else
+  t_ok "workflow invokes no paid agent and uses no secret context"
+fi
+# ci-local.sh itself: fail-fast, no mutation, runnable from anywhere (static shape)
+if grep -q 'exit "$2"' "$CIL" && grep -q 'cd "$ROOT"' "$CIL"; then
+  t_ok "ci-local.sh preserves failing step exit status and cds to repo root"
+else t_fail "ci-local.sh shape" "fail-fast/root handling regressed"; fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
