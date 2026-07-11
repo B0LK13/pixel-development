@@ -160,8 +160,8 @@ pixel-bootstrap.sh   [--open-store] [--repo-base=URL]
 pixel-dev-setup.sh   [--minimal] [--no-ai] [--yes]
 pixel-apps-setup.sh  [--open-stores] [--with-tailscale-cli] [--ssh-port=N] [--no-font] [--yes]
 pixel-autodev.sh     [--workspace=DIR] [--backlog=FILE] [--max-tasks=N] [--max-turns=N]
-                     [--budget=USD] [--model=sonnet|opus] [--agent=claude|codex]
-                     [--yolo] [--push] [--dry-run] [--yes]
+                     [--budget=USD] [--timeout=SECONDS] [--model=sonnet|opus]
+                     [--agent=claude|codex] [--yolo] [--push] [--dry-run] [--yes]
 ```
 
 Every script supports `--help`.
