@@ -181,3 +181,52 @@ POSIX bracket class, guard `sed -i` by platform, and detect `timeout` vs
   (SC2015 ×8, SC2016 ×1) are individually justified (F9 + harness line 162,
   where the single-quoted `'timeout "\$TIMEOUT"'` pattern is intentional —
   it must match the literal text in `pixel-autodev.sh`).
+
+## Session 3 follow-up (auto/integrate-session-3)
+
+Decisions on the deferred register, each validated against the current code
+before any change:
+
+- **F6 / R2 — implemented.** `--ssh-port` is validated as an integer in
+  1–65535 before the log file is created or preflight runs (exit 2, flag
+  named on stderr). Leading zeros are tolerated and canonicalised
+  (`08022` → `8022`), matching the `--timeout` convention; the canonical
+  value is what every consumer sees, so the `sed -i` replacement can no
+  longer receive a metacharacter payload. Harness §9.
+- **F7 / R3 — implemented.** `--max-tasks` (1–999999, canonicalised because
+  it drives the loop-bound arithmetic), `--max-turns` (positive integer,
+  passed through), `--budget` (positive decimal: digits, ≤1 dot, digit each
+  side, non-zero). All exit 2 before preflight and before any `.autodev`
+  state or seed file exists. Harness §10.
+- **F1 follow-up — implemented.** The `--timeout` check was rewritten with
+  the same arithmetic-free logic: the old `[ -gt 0 ]` rejected
+  `--timeout=08` as an octal error and wrapped huge values, contradicting
+  the documented "leading zeros tolerated / very large values accepted".
+  Values now pass through unchanged. Harness §10d.
+- **F15 / R5 — implemented.** `--agent` is validated against the
+  `claude|codex` enum before preflight (exit 2). The preflight/dispatch
+  mismatch (an unknown name resolving a real binary, then taking the claude
+  branch) is gone; an unenumerated name can never reach command lookup.
+  Harness §11.
+- **F15 / R4 — deferred deliberately.** `--` remains an unknown flag
+  (exit 2). No script forwards arguments to another command, so there is no
+  concrete need; the deterministic behavior and positional-argument
+  rejection are pinned by harness §7/§12 and documented in the contract §1.
+- **R1 — deferred.** Checksum/signature pinning for the `curl | bash`
+  installers needs upstream-published checksums and a network fixture to
+  test — both outside hermetic scope. Safest future path: vendor SHA-256
+  pins of the three scripts into `pixel-bootstrap.sh` and verify on
+  download, once the pins themselves have a distribution story.
+- **R6 — implemented.** `.gitattributes` (`* text=auto eol=lf`); all blobs
+  are already LF, so there is no renormalisation churn. Harness §14.
+- **Workstream 8 extras — implemented.** Preflight dies clearly when GNU
+  `timeout` is missing (previously a cryptic rc=127 per task), and
+  `--dry-run` skips agent resolution so it requires no paid-agent
+  executable. Harness §13.
+
+Coverage caveat (honest): the missing-tool `die` paths (`timeout`, `git`,
+agent binary) are verified by inspection. On every supported host — and on
+CI — those binaries occupy the preflight's scrubbed PATH prefix
+(`/root/.npm-global/bin:/root/.local/bin:/usr/local/bin:/usr/bin:/bin`), so
+a controlled-PATH absence test cannot be made hermetic without a new seam,
+and no seam is added solely for testing.
