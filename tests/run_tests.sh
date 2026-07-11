@@ -711,6 +711,112 @@ else
   t_skip "gpg/gpgv not installed — signature fixtures skipped (install gnupg to run)"
 fi
 
+# --- 20. checksum lifecycle tool (scripts/update-bootstrap-checksums.sh) ----------
+CKTOOL="$ROOT/scripts/update-bootstrap-checksums.sh"
+mk_fx(){ # $1 fixture dir — a mini repo root (scripts/ + config/ + 3 artifacts)
+  local d="$1"; mkdir -p "$d/scripts" "$d/config"
+  cp "$CKTOOL" "$d/scripts/"
+  cp "$ROOT/pixel-bootstrap.sh" "$ROOT/pixel-dev-setup.sh" "$ROOT/pixel-apps-setup.sh" "$d/"
+  cp "$ROOT/config/bootstrap-checksums.txt" "$d/config/"
+}
+fxrun(){ # $1 fixture  $2.. args → rc/out; runs from a neutral cwd (outside root)
+  local d="$1"; shift
+  out="$(cd "$tmp" && bash "$d/scripts/update-bootstrap-checksums.sh" "$@" 2>&1)"; rc=$?
+}
+ck_leftovers(){ ls "$1"/.embedded.* "$1"/config/.bootstrap-checksums.* 2>/dev/null | wc -l; }
+
+# 20a. current manifest passes; the fixture path contains a space (proves quoting)
+mk_fx "$tmp/fx a"; fxrun "$tmp/fx a" --check
+if [ $rc -eq 0 ] && case "$out" in *"is current"*) true;; *) false;; esac && case "$tmp/fx a" in *' '*) true;; *) false;; esac; then
+  t_ok "checksum tool: current manifest passes --check (path with spaces)"
+else t_fail "tool current" "rc=$rc"$'\n'"$out"; fi
+
+# 20b+c. stale manifest fails --check naming the artifact; --write repairs it
+mk_fx "$tmp/fx b"; printf 'tamper\n' >> "$tmp/fx b/pixel-apps-setup.sh"
+fxrun "$tmp/fx b" --check
+if [ $rc -eq 1 ] && case "$out" in *"STALE: pixel-apps-setup.sh"*) true;; *) false;; esac; then
+  t_ok "checksum tool: stale manifest fails --check naming the artifact"
+else t_fail "tool stale" "rc=$rc"$'\n'"$out"; fi
+fxrun "$tmp/fx b" --write; wrc=$rc
+fxrun "$tmp/fx b" --check
+if [ $wrc -eq 0 ] && [ $rc -eq 0 ] && [ "$(ck_leftovers "$tmp/fx b")" -eq 0 ]; then
+  t_ok "checksum tool: --write repairs stale manifest+embedded (no temp leftovers)"
+else t_fail "tool write" "write_rc=$wrc recheck_rc=$rc"; fi
+
+# 20d. missing artifact
+mk_fx "$tmp/fx d"; rm "$tmp/fx d/pixel-dev-setup.sh"; fxrun "$tmp/fx d" --check
+if [ $rc -eq 1 ] && case "$out" in *"missing artifact: pixel-dev-setup.sh"*) true;; *) false;; esac; then
+  t_ok "checksum tool: missing artifact fails clearly"
+else t_fail "tool missing artifact" "rc=$rc"$'\n'"$out"; fi
+
+# 20e/f/g. malformed / duplicate / unexpected manifest entries are rejected
+mk_fx "$tmp/fx e"; printf 'not a digest line\n' >> "$tmp/fx e/config/bootstrap-checksums.txt"
+fxrun "$tmp/fx e" --check
+[ $rc -eq 1 ] && case "$out" in *"malformed"*) true;; *) false;; esac \
+  && t_ok "checksum tool: malformed manifest line rejected" || t_fail "tool malformed" "rc=$rc"$'\n'"$out"
+mk_fx "$tmp/fx f"; printf '%s  pixel-apps-setup.sh\n' "$(file_sha "$ROOT/pixel-apps-setup.sh")" >> "$tmp/fx f/config/bootstrap-checksums.txt"
+fxrun "$tmp/fx f" --check
+[ $rc -eq 1 ] && case "$out" in *"duplicate"*) true;; *) false;; esac \
+  && t_ok "checksum tool: duplicate manifest entry rejected" || t_fail "tool duplicate" "rc=$rc"$'\n'"$out"
+mk_fx "$tmp/fx g"; printf '%s  evil.sh\n' "0000000000000000000000000000000000000000000000000000000000000000" >> "$tmp/fx g/config/bootstrap-checksums.txt"
+fxrun "$tmp/fx g" --check
+[ $rc -eq 1 ] && case "$out" in *"unexpected artifact: evil.sh"*) true;; *) false;; esac \
+  && t_ok "checksum tool: unexpected artifact name rejected" || t_fail "tool unexpected" "rc=$rc"$'\n'"$out"
+
+# 20h. deterministic ordering + idempotent write
+mk_fx "$tmp/fx h"; fxrun "$tmp/fx h" --write; fxrun "$tmp/fx h" --write
+order="$(grep -E '^[0-9a-f]{64}' "$tmp/fx h/config/bootstrap-checksums.txt" | awk '{print $2}' | tr '\n' ' ')"
+if [ $rc -eq 0 ] && case "$out" in *"already current"*) true;; *) false;; esac \
+   && [ "$order" = "pixel-apps-setup.sh pixel-bootstrap.sh pixel-dev-setup.sh " ]; then
+  t_ok "checksum tool: deterministic sorted order; second --write changes nothing"
+else t_fail "tool ordering" "rc=$rc order=$order"$'\n'"$out"; fi
+
+# 20i. symlink escape is refused
+mk_fx "$tmp/fx i"; rm "$tmp/fx i/pixel-apps-setup.sh"; ln -s /etc/passwd "$tmp/fx i/pixel-apps-setup.sh"
+fxrun "$tmp/fx i" --check
+if [ $rc -eq 1 ] && case "$out" in *"symlink"*) true;; *) false;; esac; then
+  t_ok "checksum tool: symlink artifact refused"
+else t_fail "tool symlink" "rc=$rc"$'\n'"$out"; fi
+
+# 20j. --check never mutates (even a stale manifest)
+mk_fx "$tmp/fx j"; printf 'tamper\n' >> "$tmp/fx j/pixel-dev-setup.sh"
+before="$(file_sha "$tmp/fx j/config/bootstrap-checksums.txt")"; fxrun "$tmp/fx j" --check
+after="$(file_sha "$tmp/fx j/config/bootstrap-checksums.txt")"
+if [ $rc -eq 1 ] && [ "$before" = "$after" ]; then
+  t_ok "checksum tool: --check is non-mutating on a stale manifest"
+else t_fail "tool check-mutate" "rc=$rc"; fi
+
+# 20k. interrupted write simulation: embedded pattern unmatchable → --write dies
+#      before touching the manifest; no partial state, no temp leftovers
+mk_fx "$tmp/fx k"; sed -i -E '/pixel-apps-setup\.sh\).*printf/d' "$tmp/fx k/pixel-bootstrap.sh"
+before="$(file_sha "$tmp/fx k/config/bootstrap-checksums.txt")"; fxrun "$tmp/fx k" --write
+after="$(file_sha "$tmp/fx k/config/bootstrap-checksums.txt")"
+if [ $rc -eq 1 ] && case "$out" in *"expected 1 line"*) true;; *) false;; esac \
+   && [ "$before" = "$after" ] && [ "$(ck_leftovers "$tmp/fx k")" -eq 0 ]; then
+  t_ok "checksum tool: failed --write leaves manifest byte-identical (no partial state)"
+else t_fail "tool interrupted write" "rc=$rc"$'\n'"$out"; fi
+
+# 20l. embedded/manifest mismatch is detected (single lockstep source of truth)
+mk_fx "$tmp/fx l"
+sed -i -E '/pixel-apps-setup\.sh\).*printf/ s/[0-9a-f]{64}/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/' "$tmp/fx l/pixel-bootstrap.sh"
+fxrun "$tmp/fx l" --check
+if [ $rc -eq 1 ] && case "$out" in *"EMBEDDED STALE: pixel-apps-setup.sh"*) true;; *) false;; esac; then
+  t_ok "checksum tool: embedded/manifest mismatch detected"
+else t_fail "tool embedded mismatch" "rc=$rc"$'\n'"$out"; fi
+
+# 20m. usage contract: unknown argument and conflicting modes exit 2
+bash "$CKTOOL" --bogus >/dev/null 2>&1; rc=$?
+[ $rc -eq 2 ] && t_ok "checksum tool: unknown argument is a usage error (exit 2)" || t_fail "tool usage" "rc=$rc"
+bash "$CKTOOL" --check --write >/dev/null 2>&1; rc=$?
+[ $rc -eq 2 ] && t_ok "checksum tool: --check --write conflict is a usage error (exit 2)" || t_fail "tool conflict" "rc=$rc"
+
+# 20n. clean-clone execution: the committed tool passes --check from a fresh clone
+ckclone="$tmp/ck clone"
+if git clone -q --local "$ROOT" "$ckclone" 2>/dev/null \
+   && ( cd / && bash "$ckclone/scripts/update-bootstrap-checksums.sh" --check >/dev/null 2>&1 ); then
+  t_ok "checksum tool: --check passes from a clean clone"
+else t_fail "tool clean-clone" "clone or check failed"; fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
