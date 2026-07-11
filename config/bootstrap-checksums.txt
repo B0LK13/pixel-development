@@ -1,20 +1,22 @@
-# Bootstrap download verification — pinned SHA-256 digests.
+# Bootstrap integrity pins — SHA-256 digests (schema v1).
 #
-# pixel-bootstrap.sh verifies network-fetched setup scripts against these
-# digests before installing them. This file is the source of truth for the
-# digests embedded in pixel-bootstrap.sh; the test harness (section 16)
-# enforces that this file, the embedded digests, and the actual script
-# contents stay in lockstep.
+# Scope: the three root-level shell entry points. pixel-bootstrap.sh verifies
+# network-fetched setup scripts against the digests embedded in ITSELF (kept
+# in lockstep with this file — harness section 16); this manifest additionally
+# pins pixel-bootstrap.sh itself, putting the anchor's digest on record for
+# the verified install flow (README.md §1) and for release verification.
 #
-# Established from: main @ 711c23b (post Session 3 integration), computed
-# with `sha256sum pixel-dev-setup.sh pixel-apps-setup.sh` on 2026-07-11.
+# Established from: main @ 711c23b (dev/apps digests, 2026-07-11); the anchor
+# pin tracks the working tree and is re-pinned by any bootstrap change.
 #
-# Update procedure (any change to either script):
-#   1. sha256sum pixel-dev-setup.sh pixel-apps-setup.sh
-#   2. update this file AND the embedded digests in pixel-bootstrap.sh
-#      in the SAME commit as the script change (the harness goes red otherwise)
-#   3. note the commit the digests were established from, above
+# Update procedure (any change to a pinned script — one lockstep workflow):
+#   1. update the embedded digests in pixel-bootstrap.sh (dev/apps only)
+#   2. refresh this manifest in the SAME commit
+#   3. all three must agree — harness §16 and CI go red otherwise
+# (Session 5: `bash scripts/update-bootstrap-checksums.sh --write` performs
+#  steps 1+2 deterministically; `--check` is the gate.)
 #
-# Format: <sha256>  <script name>   (sha256sum format)
-bc9b49fa953ae5511fd576180f83e00f350788b6f5d3cab295a649ede14a292f  pixel-dev-setup.sh
+# Format: <sha256>  <script name>  (sha256sum format, sorted by name)
 844d81db780f9ffec8f7d49388f9261429d34d826737ea2abbe533b7892eb619  pixel-apps-setup.sh
+63319e3c54fd4dfdcef2727585fa0822aed24b9a45d578e9c727a9accdeb6c97  pixel-bootstrap.sh
+bc9b49fa953ae5511fd576180f83e00f350788b6f5d3cab295a649ede14a292f  pixel-dev-setup.sh

@@ -7,8 +7,8 @@
 #  buttons. It also finds (or downloads) the two setup scripts so the very    #
 #  first run is a single paste.                                               #
 #                                                                             #
-#  First-run one-liner (if you host the scripts):                             #
-#    curl -fsSL <BASE>/pixel-bootstrap.sh | PIXEL_REPO_BASE=<BASE> bash       #
+#  Install: use the VERIFIED flow in README.md §1 (commit-pinned URL +        #
+#  SHA-256 check). Pipe-to-shell is intentionally not the documented path.    #
 #  Or save all three .sh files together and run:  bash pixel-bootstrap.sh     #
 #                                                                             #
 #  Usage: bash pixel-bootstrap.sh [--open-store] [--repo-base=URL] [-h]       #
@@ -25,7 +25,7 @@ for arg in "$@"; do
   case "$arg" in
     --open-store)   OPEN_STORE=1 ;;
     --repo-base=*)  REPO_BASE="${arg#*=}" ;;
-    --help|-h) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown flag: $arg (try --help)"; exit 2 ;;
   esac
 done

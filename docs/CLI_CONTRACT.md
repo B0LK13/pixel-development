@@ -48,18 +48,24 @@ Termux entry point; installs shortcuts. Preflight requires Termux
 Note: `--yes` is **not** accepted here (it is an unknown flag in this script).
 The parity `--yes` lives in the other three scripts.
 
-**Download verification (session 4).** The two setup scripts this script
+**Download verification (sessions 4–5).** The two setup scripts this script
 fetches (`pixel-dev-setup.sh`, `pixel-apps-setup.sh`) are downloaded to a
 temp file and verified against pinned SHA-256 digests *before* installation
 (`pixel-bootstrap.sh:96-115`). Fail closed — exit 1, nothing installed, temp
 removed by an `EXIT` trap — on download failure, missing digest, missing hash
 tool, or mismatch. Local/cached copies are operator-trusted and skip
-verification. Pins: `config/bootstrap-checksums.txt` (source of truth) with
-the same values embedded in the script (it must stay self-contained for
-`curl | bash` use); harness §16 enforces the two-way sync plus lockstep with
-the actual script contents, §17 proves the runtime behavior hermetically.
-Maintenance seam: `PIXEL_BOOTSTRAP_CHECKSUM_FILE` supplies an alternate
-manifest (a missing entry there still fails closed).
+verification. Pins: `config/bootstrap-checksums.txt` (source of truth, now
+pinning all three entry points **including the anchor itself**) with the
+dev/apps values embedded in the script (it must stay self-contained for
+stand-alone use); harness §16 enforces the three-way lockstep with the actual
+file contents, §17 proves the runtime behavior hermetically. The anchor pin
+underwrites the verified install flow in `README.md` §1 (fetch →
+`sha256sum -c` → run, commit-pinned; harness §18). Maintenance seam:
+`PIXEL_BOOTSTRAP_CHECKSUM_FILE` supplies an alternate manifest (a missing
+entry there still fails closed). Signature verification of the anchor
+(`scripts/verify-bootstrap-signature.sh`, gpgv) is tier 2 — mechanics
+implemented, production signing operator-blocked (harness §19; see
+`docs/adr/ADR-BOOTSTRAP-ANCHOR-AUTHENTICITY.md`).
 
 ## 3. pixel-dev-setup.sh
 
@@ -166,15 +172,20 @@ explicit / duplicate-last-wins / huge / leading-zero `08`), mechanism rc=124,
 both-backend wiring, and hermetic end-to-end success + per-backend timeout
 paths with stub agents.
 
-## 7. Recommendations register (status after session 4 — see `docs/AUTONOMOUS_AUDIT.md`)
+## 7. Recommendations register (status after session 5 — see `docs/AUTONOMOUS_AUDIT.md`)
 
-- **R1**: **implemented (scoped)** — the two scripts `pixel-bootstrap.sh`
-  fetches over the network are verified against vendored SHA-256 pins before
-  installation, failing closed (§2, §8 trust model; harness §16/§17). The
-  residual trust anchor — the `curl | bash` of `pixel-bootstrap.sh` itself,
-  and the third-party installer pipes inside `pixel-dev-setup.sh` — is
-  documented as a blocked sub-item in the audit addendum (needs upstream
-  signed releases or an out-of-band checksum channel).
+- **R1**: **implemented (scoped), anchor gap reduced** — the two scripts
+  `pixel-bootstrap.sh` fetches over the network are verified against vendored
+  SHA-256 pins before installation, failing closed (§2, §8 trust model;
+  harness §16/§17). The anchor itself is now (a) pinned in the manifest, (b)
+  installed through a commit-pinned fetch → `sha256sum -c` → run flow with no
+  pipe-to-shell (README §1, harness §18), and (c) covered by gpgv
+  signature-verification mechanics (`scripts/verify-bootstrap-signature.sh`,
+  harness §19) that a maintainer signing identity can activate without code
+  changes. Residual: anchor *authenticity* still awaits an operator-provisioned
+  signing key published out-of-band (blocked, prerequisites in the ADR); the
+  third-party installer pipes inside `pixel-dev-setup.sh` remain under the
+  charter's package-install exception.
 - **R2**: **implemented** — `--ssh-port` validated as `1–65535` (§4, harness §9).
 - **R3**: **implemented** — `--max-tasks` / `--max-turns` / `--budget`
   validated (§5, harness §10).
@@ -200,14 +211,16 @@ Runtime dependency inventory (from the scripts themselves, not assumed):
 | `claude` / `codex` | conditionally required | autodev, **non-dry-run only** | `die` exit 1 naming the agent; `--dry-run` skips resolution entirely |
 | jq | optional | autodev (JSON summaries), harness (JSON check) | degrades with a warning (apt-get install attempted; plain-text fallback); harness skips its check |
 | curl | conditionally required | bootstrap downloads (when no local copy), dev-setup installers | bootstrap aborts (exit 1) if it cannot fetch a verified copy; local/cached copies need no curl |
-| `sha256sum` or `shasum` | conditionally required | bootstrap download verification | `die` exit 1 — refuses to install unverified content |
+| `sha256sum` or `shasum` | conditionally required | bootstrap download verification, checksum tool, README verified flow | `die` exit 1 — refuses to install unverified content |
+| `gpgv` (`gnupg`) | optional | anchor signature verification (`scripts/verify-bootstrap-signature.sh`, tier 2) | helper dies exit 1 naming gpgv; only needed when a maintainer signature exists |
 | sed / grep / date / mktemp / tr / cut / awk | required coreutils | all scripts | present in every supported environment |
 | shellcheck | test-only | harness lint gate | gate skipped with a notice when absent |
 | git (fixture repos) | test-only | harness workspaces | harness requires it (CI provides it) |
-| agent/tool stubs | test-only | harness via `CLAUDE_BIN` / `CODEX_BIN` / `TIMEOUT_BIN` / `GIT_BIN` seams + a `pkg` stub | n/a |
+| gpg (ephemeral keys) | test-only | harness §19 signature fixtures | section skipped with a notice when absent |
+| agent/tool stubs | test-only | harness via `CLAUDE_BIN` / `CODEX_BIN` / `TIMEOUT_BIN` / `GIT_BIN` / `GPGV_BIN` seams + a `pkg` stub | n/a |
 
 Environment override seams (not flags): `PIXEL_WORKSPACE`, `PIXEL_REPO_BASE`,
-`CLAUDE_BIN`, `CODEX_BIN`, `TIMEOUT_BIN`, `GIT_BIN`,
+`CLAUDE_BIN`, `CODEX_BIN`, `TIMEOUT_BIN`, `GIT_BIN`, `GPGV_BIN`,
 `PIXEL_BOOTSTRAP_CHECKSUM_FILE`. `--help` and usage errors need none of the
 above — parsing and validation run before every dependency check.
 
