@@ -103,11 +103,16 @@ preflight(){
   # Scrub any Termux PATH leak so the guest node/agent win (the codex-shadow bug).
   export PATH="/root/.npm-global/bin:/root/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
   hash -r
-  case "$(command -v "$AGENT" 2>/dev/null)" in
-    *com.termux*) die "'$AGENT' is resolving to the Termux binary. You are not in the devbox — run: devbox, then retry." ;;
-    "") die "'$AGENT' not found. Enter the devbox and install the AI stack first." ;;
-    *) ok "agent: $AGENT ($(command -v "$AGENT"))" ;;
-  esac
+  if [ "$DRY" = 1 ]; then
+    info "dry-run: skipping agent resolution (no agent is invoked)"
+  else
+    case "$(command -v "$AGENT" 2>/dev/null)" in
+      *com.termux*) die "'$AGENT' is resolving to the Termux binary. You are not in the devbox — run: devbox, then retry." ;;
+      "") die "'$AGENT' not found. Enter the devbox and install the AI stack first." ;;
+      *) ok "agent: $AGENT ($(command -v "$AGENT"))" ;;
+    esac
+  fi
+  have timeout || die "GNU timeout (coreutils) is required in the devbox"
   have jq || { info "installing jq…"; apt-get install -y -qq jq >/dev/null 2>&1 || warn "jq missing (JSON parse limited)"; }
   have git || die "git not installed in devbox"
   [ -d "$WORKSPACE" ] || die "workspace not found: $WORKSPACE (set --workspace=DIR)"
