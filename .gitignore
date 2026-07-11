@@ -1,0 +1,15 @@
+# logs & run artifacts
+*.log
+.autodev/
+# secrets & env
+.env
+*.key
+*.pem
+# scratch
+*.tmp
+*.bak
+# language junk
+__pycache__/
+*.pyc
+node_modules/
+.venv/
