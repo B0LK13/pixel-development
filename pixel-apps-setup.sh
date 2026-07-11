@@ -13,7 +13,7 @@
 #                                                                             #
 #  Pairs with: pixel-dev-setup.sh (the dev/AI toolchain).                     #
 #  Usage: bash pixel-apps-setup.sh [--open-stores] [--with-tailscale-cli]     #
-#                                  [--ssh-port N] [--no-font] [--yes] [-h]    #
+#                                  [--ssh-port=N] [--no-font] [--yes] [-h]    #
 ###############################################################################
 set -uo pipefail
 
@@ -22,7 +22,7 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 SCRIPT_VERSION="1.0.0"
 LOG_FILE="${HOME}/pixel-apps-setup.log"
-OPEN_STORES=0; TS_CLI=0; NO_FONT=0; ASSUME_YES=0; SSH_PORT=8022
+OPEN_STORES=0; TS_CLI=0; NO_FONT=0; SSH_PORT=8022
 FAILED=()
 
 for arg in "$@"; do
@@ -30,12 +30,25 @@ for arg in "$@"; do
     --open-stores)        OPEN_STORES=1 ;;
     --with-tailscale-cli) TS_CLI=1 ;;
     --no-font)            NO_FONT=1 ;;
-    --yes|-y)             ASSUME_YES=1 ;;
+    --yes|-y)             : ;;  # accepted for CLI parity with pixel-dev-setup.sh (no prompts here)
     --ssh-port=*)         SSH_PORT="${arg#*=}" ;;
     --help|-h) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown flag: $arg (try --help)"; exit 2 ;;
   esac
 done
+
+# Validate --ssh-port before any side effect (log file, preflight): it must be
+# an integer in 1–65535. Leading zeros are tolerated and canonicalised
+# (08022 → 8022), the same convention as pixel-autodev.sh's --timeout.
+bad_port(){ echo "pixel-apps-setup: --ssh-port must be an integer between 1 and 65535 (got '$1')" >&2; exit 2; }
+case "$SSH_PORT" in
+  ''|*[!0-9]*) bad_port "$SSH_PORT" ;;
+esac
+SSH_PORT="${SSH_PORT#"${SSH_PORT%%[!0]*}"}"   # strip leading zeros (pure string op — no arithmetic)
+[ -n "$SSH_PORT" ] || SSH_PORT=0              # "0"/"000…" collapses to 0, rejected below
+if [ "${#SSH_PORT}" -gt 5 ] || [ "$SSH_PORT" -lt 1 ] || [ "$SSH_PORT" -gt 65535 ]; then
+  bad_port "$SSH_PORT"
+fi
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_R=$'\033[0m'; C_B=$'\033[1m'; C_DIM=$'\033[2m'

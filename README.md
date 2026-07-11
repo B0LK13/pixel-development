@@ -160,8 +160,8 @@ pixel-bootstrap.sh   [--open-store] [--repo-base=URL]
 pixel-dev-setup.sh   [--minimal] [--no-ai] [--yes]
 pixel-apps-setup.sh  [--open-stores] [--with-tailscale-cli] [--ssh-port=N] [--no-font] [--yes]
 pixel-autodev.sh     [--workspace=DIR] [--backlog=FILE] [--max-tasks=N] [--max-turns=N]
-                     [--budget=USD] [--model=sonnet|opus] [--agent=claude|codex]
-                     [--yolo] [--push] [--dry-run] [--yes]
+                     [--budget=USD] [--timeout=SECONDS] [--model=sonnet|opus]
+                     [--agent=claude|codex] [--yolo] [--push] [--dry-run] [--yes]
 ```
 
 Every script supports `--help`.
@@ -185,6 +185,8 @@ pixel-development/
 ├─ pixel-dev-setup.sh
 ├─ pixel-apps-setup.sh
 ├─ pixel-autodev.sh
+├─ tests/run_tests.sh   ← verification gate (syntax, shellcheck, dry-run behaviour)
+├─ .pixel-lab.json      ← stack metadata the autodev runner reads for the test command
 ├─ KICKSTART.md
 ├─ README.md
 ├─ LICENSE
@@ -192,10 +194,42 @@ pixel-development/
 ```
 
 Keep the scripts at the repo **root** so the `curl | bash` raw URLs resolve.
+Run the suite yourself with `bash tests/run_tests.sh` — the autodev runner picks
+the same command up from `.pixel-lab.json` when it works tasks in this repo.
 
 ---
 
-## 11. License
+## 11. Development
+
+**Run the verification gate:**
+
+```bash
+bash tests/run_tests.sh
+```
+
+It checks required files, `bash -n` syntax, shellcheck (warning and up), the
+`--help`/unknown-flag contract, `.pixel-lab.json` validity, autodev dry-run
+behaviour, the full `--timeout` contract, and finishes with a clean-clone
+smoke test. It is hermetic: no network, no paid agents (stubs are injected via
+`CLAUDE_BIN`/`CODEX_BIN`), works from any directory, and leaves the tree clean.
+
+**CI.** `.github/workflows/test.yml` runs the same suite on pushes to `main`
+and `auto/*` and on every pull request — local tests only, `contents: read`,
+10-minute cap. CI never invokes agents, never pushes, never mutates the repo.
+
+**Operating model:**
+
+- Agents never push; **the operator owns merging `auto/*` and all publication.**
+- One task = one `auto/<slug>` branch; commit only when the gate is green.
+- `--ssh-port` uses equals syntax only and must be an integer in **1–65535** (`--ssh-port=9022`).
+- `--timeout` defaults to **1200 seconds**; `--max-tasks`, `--max-turns`, `--budget`, and `--timeout` are all validated before anything runs (malformed input = exit 2, no state touched).
+- `--agent` accepts only `claude` or `codex`; `--dry-run` never invokes an agent and needs no agent binary installed.
+- Full flag contract: [`docs/CLI_CONTRACT.md`](docs/CLI_CONTRACT.md).
+  Security + portability audit: [`docs/AUTONOMOUS_AUDIT.md`](docs/AUTONOMOUS_AUDIT.md).
+
+---
+
+## 12. License
 
 MIT — see [LICENSE](LICENSE).
 

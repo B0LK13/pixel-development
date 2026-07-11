@@ -139,7 +139,6 @@ termux-wake-lock
 sshd 2>/dev/null
 syncthing -no-browser >/dev/null 2>&1 &
 EOF
-mv "$SHORTCUTS/tasks/start-daemons" "$SHORTCUTS/tasks/" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 4. Termux:Widget app
