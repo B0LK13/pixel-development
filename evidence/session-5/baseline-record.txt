@@ -1,0 +1,15 @@
+Session 5 baseline record
+Generated: 2026-07-11T15:36:08Z (UTC), before any Session 5 change
+
+Selected base branch:        auto/integrate-session-4
+Selected base commit:        c8a5466c31d0a8dc4a461da0d3acc2c7ac487610
+Current main commit:         711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c
+Session 4 ancestry status:   c8a5466 contains 711c23b (main) and 2bb8df1 (Session 1);
+                             c8a5466 is NOT an ancestor of main, so Session 4 has not
+                             been promoted yet
+Base selection rule applied: main lacks Session 4 -> branch from auto/integrate-session-4
+Integration branch created:  auto/integrate-session-5 at c8a5466
+Starting test result:        146 passed / 0 failed / 0 skipped (baseline run on c8a5466)
+Working-tree status:         clean
+Constraints in force:        no push, no merge into main, no paid agents, no secrets,
+                             no production signing keys, no weakening of tests
