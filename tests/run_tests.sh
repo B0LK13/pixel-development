@@ -42,7 +42,7 @@ fi
 echo "== pixel-development test suite =="
 
 # --- 0. Required files --------------------------------------------------------
-for f in "${SCRIPTS[@]}" scripts/verify-bootstrap-signature.sh scripts/update-bootstrap-checksums.sh scripts/ci-local.sh scripts/build-release-candidate.sh config/bootstrap-checksums.txt .pixel-lab.json; do
+for f in "${SCRIPTS[@]}" scripts/verify-bootstrap-signature.sh scripts/update-bootstrap-checksums.sh scripts/ci-local.sh scripts/build-release-candidate.sh scripts/verify-release-bundle.sh config/bootstrap-checksums.txt .pixel-lab.json; do
   if [ -f "$f" ]; then t_ok "required file present: $f"; else t_fail "required file missing: $f"; fi
 done
 
@@ -1183,6 +1183,171 @@ if mk_rc_clone "$rcroot/repo"; then
   fi
 else
   t_fail "release candidate fixtures" "could not clone repo into \$tmp"
+fi
+
+# --- 25. release bundle verifier: integrity + failure injection -----------------
+VRB="$ROOT/scripts/verify-release-bundle.sh"
+vroot="$tmp/vb"; mkdir -p "$vroot"
+vb_good=''
+if mk_rc_clone "$vroot/repo" \
+   && bash "$vroot/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$vroot/out" >"$vroot/build.log" 2>&1; then
+  vb_good="$vroot/out/pixel-development-1.0.0"
+fi
+vrun(){ vout="$(bash "$VRB" "$@" 2>&1)"; rc=$?; }
+vcase(){ VB="$vroot/$1"; rm -rf "$VB"; cp -a "$vb_good" "$VB"; }
+vassert(){ # $1 want-verdict  $2 want-rc  $3 test-name
+  if [ "$rc" -eq "$2" ] && case "$vout" in *"verdict: $1"*) true;; *) false;; esac; then
+    t_ok "$3"
+  else
+    t_fail "$3" "rc=$rc want $1/$2"$'\n'"$vout"
+  fi
+}
+
+if [ -n "$vb_good" ]; then
+  # 25a. unsigned happy path: integrity-only, authenticity explicitly absent
+  vrun --bundle="$vb_good"
+  if [ "$rc" -eq 0 ] \
+     && case "$vout" in *"verdict: verified-integrity-only"*) true;; *) false;; esac \
+     && case "$vout" in *"authenticity NOT established"*) true;; *) false;; esac; then
+    t_ok "verify: unsigned bundle → verified-integrity-only (authenticity NOT claimed)"
+  else t_fail "verify integrity-only" "rc=$rc"$'\n'"$vout"; fi
+
+  # 25b. --require-signature without a signature → policy failure
+  vrun --bundle="$vb_good" --require-signature
+  vassert failed-policy 1 "verify: --require-signature without signature → failed-policy"
+
+  # 25c-g. layout failures
+  vrun --bundle="$vroot/no-such-bundle"
+  vassert failed-layout 1 "verify: missing bundle dir → failed-layout"
+  vcase extra;  : > "$VB/NOTES.txt"
+  vrun --bundle="$VB"; vassert failed-layout 1 "verify: unexpected entry → failed-layout"
+  vcase sym;    ln -s pixel-bootstrap.sh "$VB/evil.sh"
+  vrun --bundle="$VB"; vassert failed-layout 1 "verify: symlink entry → failed-layout"
+  vcase dirent; mkdir "$VB/subdir"
+  vrun --bundle="$VB"; vassert failed-layout 1 "verify: directory entry → failed-layout"
+  vcase miss;   rm "$VB/VERIFY.md"
+  vrun --bundle="$VB"; vassert failed-layout 1 "verify: missing core file → failed-layout"
+
+  # 25h-n. metadata schema failures
+  vcase m1; sed -i '/^  "version": /d' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: metadata missing required key → failed-metadata"
+  vcase m2; sed -i 's/"schema_version": "1.0"/"schema_version": "2.0"/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: unsupported schema version → failed-metadata"
+  vcase m3; sed -i -E 's/("commit": ")[0-9a-f]{40}/\1c1a59c7c/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: abbreviated commit → failed-metadata"
+  vcase m4; sed -i '/"path": "pixel-bootstrap.sh"/p' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: duplicate artifact entry → failed-metadata"
+  vcase m5; sed -i 's|"path": "bootstrap-checksums.txt"|"path": "../evil.sh"|' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: traversal path in metadata → failed-metadata"
+  vcase m6; sed -i 's/"mode": "0755", "role": "bootstrap"/"mode": "0644", "role": "bootstrap"/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: role/mode inconsistency → failed-metadata"
+  vcase m7; sed -i 's/"checksum_algorithm": "sha256"/"checksum_algorithm": "sha512"/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: unknown checksum algorithm → failed-metadata"
+
+  # 25o-r. checksum + consistency failures
+  vcase c1; printf 'x\n' >> "$VB/pixel-apps-setup.sh"
+  vrun --bundle="$VB"; vassert failed-checksum 1 "verify: altered artifact → failed-checksum"
+  vcase c2; chmod 600 "$VB/pixel-bootstrap.sh"
+  vrun --bundle="$VB"; vassert failed-checksum 1 "verify: mode drift → failed-checksum"
+  vcase c3; sed -i 's/"version": "1.0.0"/"version": "9.9.9"/' "$VB/SIGNING-MANIFEST.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: manifest/metadata version mismatch → failed-metadata"
+  vcase c4; sed -i -E 's/"created_at": "[0-9]{4}/"created_at": "2099/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: altered metadata breaks manifest binding → failed-metadata"
+  vcase c5
+  first2="$(head -c2 "$VB/SHA256SUMS")"; rep=00; [ "$first2" = 00 ] && rep=11
+  sed -i -E "0,/^[0-9a-f]{2}/s//$rep/" "$VB/SHA256SUMS"
+  vrun --bundle="$VB"; vassert failed-checksum 1 "verify: SHA256SUMS disagreement → failed-checksum"
+
+  # 25t-w. usage errors (exit 2) + metacharacter safety
+  vrun; [ "$rc" -eq 2 ] && t_ok "verify usage: missing --bundle exits 2" || t_fail "verify usage bundle" "rc=$rc"
+  vrun --bundle="$vb_good" --bogus; [ "$rc" -eq 2 ] && t_ok "verify usage: unknown flag exits 2" || t_fail "verify usage flag" "rc=$rc"
+  vrun --bundle="$vb_good" --signature=x; [ "$rc" -eq 2 ] && t_ok "verify usage: --signature without --keyring exits 2" || t_fail "verify usage sig/keyring" "rc=$rc"
+  pwn="$vroot/pwned"; rm -f "$pwn"
+  vrun --bundle='$(touch '"$pwn"')'
+  if [ "$rc" -eq 1 ] && [ ! -e "$pwn" ]; then t_ok "verify: metacharacter --bundle value is never executed"
+  else t_fail "verify bundle injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"; fi
+
+  # 25x. unverified .asc is labelled, never trusted
+  vcase ascnote; : > "$VB/SIGNING-MANIFEST.json.asc"
+  vrun --bundle="$VB"
+  if [ "$rc" -eq 0 ] && case "$vout" in *"NOT verified"*"verdict: verified-integrity-only"*) true;; *) false;; esac; then
+    t_ok "verify: unverified .asc noted, verdict stays integrity-only"
+  else t_fail "verify unverified asc" "rc=$rc"$'\n'"$vout"; fi
+else
+  t_fail "release verifier fixtures" "could not build a good bundle: $(cat "$vroot/build.log" 2>/dev/null)"
+fi
+
+# --- 26. release bundle verifier: signed fixtures (tier 2) ------------------------
+if command -v gpg >/dev/null 2>&1 && command -v gpgv >/dev/null 2>&1 \
+   && [ -f "$tmp/trusted.pub" ] && [ -n "$vb_good" ]; then
+  # ephemeral ed25519 keys were generated by section 19 ($GNUPGHOME exported);
+  # $tmp/trusted.pub = signer, $tmp/untrusted.pub = wrong key. Signing here is
+  # fixture-only — no production key exists or is required.
+  vsign(){ # $1 = copy name → fresh signed bundle copy in $VB
+    VB="$vroot/$1"; rm -rf "$VB"; cp -a "$vb_good" "$VB"
+    gpg --batch --yes --local-user t@example.invalid --detach-sign --armor \
+      --output "$VB/SIGNING-MANIFEST.json.asc" "$VB/SIGNING-MANIFEST.json" 2>/dev/null
+  }
+
+  vsign s1
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert verified-signed 0 "verify-signed: valid signature + matching keyring → verified-signed"
+
+  vsign s2
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub" --require-signature
+  vassert verified-signed 0 "verify-signed: valid signature with --require-signature → verified-signed"
+
+  vsign s3
+  # corrupt one base64 body character (armor CRC + signature both break);
+  # trailing garbage after the END line is ignored by gpgv, so this must be
+  # inside the body — line 4 is always base64 for an ed25519 detached sig
+  l4="$(sed -n '4p' "$VB/SIGNING-MANIFEST.json.asc" | head -c1)"; rep=A; [ "$l4" = A ] && rep=B
+  sed -i "4s/^./$rep/" "$VB/SIGNING-MANIFEST.json.asc"
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-signature 1 "verify-signed: corrupted signature fails closed"
+
+  vsign s4
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/untrusted.pub"
+  vassert failed-signature 1 "verify-signed: wrong public key → failed-signature"
+
+  vsign s5; printf 'x\n' >> "$VB/SIGNING-MANIFEST.json"
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-signature 1 "verify-signed: altered signed manifest → failed-signature"
+
+  # invariant 9: a valid signature must NOT bypass checksum verification
+  vsign s6; printf 'x\n' >> "$VB/pixel-bootstrap.sh"
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-checksum 1 "verify-signed: valid signature + altered artifact → failed-checksum"
+
+  # invariant 10: a valid signature must NOT bypass manifest/metadata consistency
+  vsign s7; sed -i -E 's/"created_at": "[0-9]{4}/"created_at": "2099/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-metadata 1 "verify-signed: valid signature + altered metadata → failed-metadata"
+
+  # bundle-embedded .asc is auto-detected when --keyring is supplied
+  vsign s8
+  vrun --bundle="$VB" --keyring="$tmp/trusted.pub" --require-signature
+  vassert verified-signed 0 "verify-signed: bundle .asc auto-detected with --keyring → verified-signed"
+
+  vsign s9
+  gpg --batch --yes --local-user t@example.invalid --detach-sign --armor \
+    --output "$VB/SIGNING-MANIFEST.json.asc" "$VB/INSTALL.md" 2>/dev/null
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-signature 1 "verify-signed: signature over the wrong file → failed-signature"
+
+  vsign s10
+  vrun --bundle="$VB" --require-signature
+  vassert failed-policy 1 "verify-signed: required signature + no keyring → failed-policy"
+
+  pwn="$vroot/pwned-keyring"; rm -f "$pwn"
+  vsign s11
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring='$(touch '"$pwn"')'
+  if [ "$rc" -eq 1 ] && [ ! -e "$pwn" ]; then t_ok "verify-signed: metacharacter --keyring value is never executed"
+  else t_fail "verify keyring injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"; fi
+elif [ -z "$vb_good" ]; then
+  : # fixture build already reported a failure in section 25
+else
+  t_skip "gpg/gpgv not installed — signed bundle fixtures skipped (install gnupg to run)"
 fi
 
 # --- summary ---------------------------------------------------------------------
