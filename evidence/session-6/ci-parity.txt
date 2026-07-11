@@ -1,0 +1,45 @@
+Session 6 CI parity evidence
+Generated: 2026-07-11T20:32:13Z (UTC)
+Command: cd / && bash /root/pixel-development/scripts/ci-local.sh
+(runs from outside the repository root; same five gates as the workflow)
+
+  ok    verify: abbreviated commit → failed-metadata
+  ok    verify: duplicate artifact entry → failed-metadata
+  ok    verify: traversal path in metadata → failed-metadata
+  ok    verify: role/mode inconsistency → failed-metadata
+  ok    verify: unknown checksum algorithm → failed-metadata
+  ok    verify: altered artifact → failed-checksum
+  ok    verify: mode drift → failed-checksum
+  ok    verify: manifest/metadata version mismatch → failed-metadata
+  ok    verify: altered metadata breaks manifest binding → failed-metadata
+  ok    verify: SHA256SUMS disagreement → failed-checksum
+  ok    verify usage: missing --bundle exits 2
+  ok    verify usage: unknown flag exits 2
+  ok    verify usage: --signature without --keyring exits 2
+  ok    verify: metacharacter --bundle value is never executed
+  ok    verify: unverified .asc noted, verdict stays integrity-only
+  ok    verify-signed: valid signature + matching keyring → verified-signed
+  ok    verify-signed: valid signature with --require-signature → verified-signed
+  ok    verify-signed: corrupted signature fails closed
+  ok    verify-signed: wrong public key → failed-signature
+  ok    verify-signed: altered signed manifest → failed-signature
+  ok    verify-signed: valid signature + altered artifact → failed-checksum
+  ok    verify-signed: valid signature + altered metadata → failed-metadata
+  ok    verify-signed: bundle .asc auto-detected with --keyring → verified-signed
+  ok    verify-signed: signature over the wrong file → failed-signature
+  ok    verify-signed: required signature + no keyring → failed-policy
+  ok    verify-signed: metacharacter --keyring value is never executed
+  ok    reproducibility: two SDE-pinned builds are byte-identical (content, modes, mtimes)
+  ok    reproducibility: different SDE changes only metadata+manifest (payload stable)
+  ok    reproducibility: non-numeric SOURCE_DATE_EPOCH rejected (exit 1, no bundle)
+  ok    RELEASE_SIGNING.md: sign/verify commands + signature-never-replaces-checksums policy
+  ok    SIGNING_KEY_LIFECYCLE.md: lifecycle covered, no key material, fixtures marked non-production
+  ok    REMOTE_CI_VERIFICATION.md: gh inspection + branch cleanup + merge criteria
+  ok    release docs contain no pipe-to-shell installation
+  ok    README §11 links the release signing, key lifecycle, and remote CI docs
+  ok    BOOTSTRAP_RELEASE_PROCESS.md documents the archive-handling decision
+  ok    verify-release-bundle.sh is side-effect free (bundle byte-identical after verify)
+
+passed: 281   failed: 0   skipped: 0
+
+ci-local: ALL GATES PASSED
