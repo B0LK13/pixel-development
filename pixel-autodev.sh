@@ -9,8 +9,9 @@
 #  Run it from the Ubuntu AI layer:  devbox → bash pixel-autodev.sh           #
 #  Usage:                                                                     #
 #    bash pixel-autodev.sh [--workspace=DIR] [--backlog=FILE] [--max-tasks=N] #
-#         [--max-turns=N] [--budget=USD] [--model=sonnet|opus]                #
-#         [--agent=claude|codex] [--yolo] [--push] [--dry-run] [--yes]        #
+#         [--max-turns=N] [--budget=USD] [--timeout=SECONDS]                  #
+#         [--model=sonnet|opus] [--agent=claude|codex]                        #
+#         [--yolo] [--push] [--dry-run] [--yes]                               #
 ###############################################################################
 set -uo pipefail
 
@@ -22,6 +23,7 @@ BACKLOG=""
 MAX_TASKS=3
 MAX_TURNS=30
 BUDGET="2.00"
+TIMEOUT=1200        # per-agent-call wall-clock limit (seconds)
 MODEL="sonnet"
 AGENT="claude"
 PMODE="dontAsk"     # CI-safe: no prompts, honors allow/deny lists
@@ -34,6 +36,7 @@ for a in "$@"; do case "$a" in
   --max-tasks=*) MAX_TASKS="${a#*=}" ;;
   --max-turns=*) MAX_TURNS="${a#*=}" ;;
   --budget=*)    BUDGET="${a#*=}" ;;
+  --timeout=*)   TIMEOUT="${a#*=}" ;;
   --model=*)     MODEL="${a#*=}" ;;
   --agent=*)     AGENT="${a#*=}" ;;
   --yolo)        PMODE="bypassPermissions" ;;
@@ -81,7 +84,7 @@ preflight(){
   fi
   ok "backlog: $BACKLOG"
   seed_charter
-  info "policy: $PMODE · model=$MODEL · max-turns=$MAX_TURNS · budget/task=\$$BUDGET · push=$([ $PUSH = 1 ] && echo on || echo off)"
+  info "policy: $PMODE · model=$MODEL · max-turns=$MAX_TURNS · budget/task=\$$BUDGET · timeout=${TIMEOUT}s · push=$([ $PUSH = 1 ] && echo on || echo off)"
 }
 
 # ---------------------------------------------------------------------------
@@ -199,9 +202,9 @@ agent_run(){ # $1 repo_dir  $2 prompt_file
   local deny="Bash(git push *),Bash(git commit *),Bash(git reset *),Bash(git checkout *),Bash(rm -rf *),Bash(sudo *),Bash(curl * | *),WebFetch"
   ( cd "$dir" || exit 90
     if [ "$AGENT" = "codex" ]; then
-      timeout 1200 codex exec --full-auto "$(cat "$pf")" 2>&1
+      timeout "$TIMEOUT" codex exec --full-auto "$(cat "$pf")" 2>&1
     else
-      timeout 1200 claude -p "$(cat "$pf")" \
+      timeout "$TIMEOUT" claude -p "$(cat "$pf")" \
         --output-format json --model "$MODEL" \
         --permission-mode "$PMODE" \
         --allowedTools "$allow" --disallowedTools "$deny" \
