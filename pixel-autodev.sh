@@ -302,14 +302,19 @@ do_task(){ # $1 index
   ( cd "$dir" && git switch -c "auto/$slug" >/dev/null 2>&1 || git switch "auto/$slug" >/dev/null 2>&1 )
 
   local pf; pf="$(mktemp)"
-  cat > "$pf" <<EOF
-Task from BACKLOG.md: $text
-
-Work in the current repository ($dir). Read $WORKSPACE/$CHARTER and follow it.
+  # Backlog text is DATA, never code: every backlog-derived value ($text, and
+  # $dir via the [repo] prefix) goes through printf %s, and the static body is
+  # a quoted heredoc — no expansion of $(...)/backticks in task text can ever
+  # occur, even after future edits to this block. Pinned by tests §6f.
+  {
+    printf 'Task from BACKLOG.md: %s\n\n' "$text"
+    printf 'Work in the current repository (%s). Read %s/%s and follow it.\n' "$dir" "$WORKSPACE" "$CHARTER"
+    cat <<'EOF'
 Make the smallest verified change that completes the task. Run the project's
 tests if any exist. Do not commit, push, or run destructive git commands —
 version control is handled for you. End with a 2–4 line summary.
 EOF
+  } > "$pf"
 
   info "dispatching agent (max-turns=$MAX_TURNS, budget=\$$BUDGET)…"
   local out; out="$(agent_run "$dir" "$pf")"; local rc=$?

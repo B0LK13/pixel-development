@@ -200,7 +200,22 @@ else
   t_fail "autodev success path" "rc=$rc last=$last"$'\n'"$out"
 fi
 
-# 6f. end-to-end timeout path per backend (stub sleeps past a 1s limit)
+# 6f. backlog task text is data, never code: prompt construction routes every
+#     backlog-derived value through printf %s with a quoted-heredoc static
+#     body — a $(...) or backtick payload in a backlog line must NOT execute
+#     when the prompt is written (or anywhere else in the dispatch path).
+ws7i="$tmp/ws7i"; mk_ws "$ws7i"
+pwn="$tmp/pwned-heredoc"
+printf -- '- [ ] Fix docs $(touch %s) and `touch %s.b`\n' "$pwn" "$pwn" > "$ws7i/BACKLOG.md"
+git -C "$ws7i" add -A && git -C "$ws7i" commit -qm task >/dev/null
+out="$(env PATH="$APATH" CLAUDE_BIN="$tmp/bin/fake-claude" bash "$ROOT/pixel-autodev.sh" --workspace="$ws7i" --timeout=30 2>&1)"; rc=$?
+if [ ! -e "$pwn" ] && [ ! -e "$pwn.b" ]; then
+  t_ok "backlog task text is inert (prompt built without shell expansion of data)"
+else
+  t_fail "backlog task text executed" "payload files: $(ls "$pwn"* 2>/dev/null)"
+fi
+
+# 6g. end-to-end timeout path per backend (stub sleeps past a 1s limit)
 printf '#!/usr/bin/env bash\nsleep 30\nexit 0\n' > "$tmp/bin/slow-agent"
 chmod +x "$tmp/bin/slow-agent"
 timeout_case(){ # $1 ws-dir  $2 task  $3 agent(claude|codex)
