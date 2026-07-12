@@ -17,6 +17,11 @@
 ###############################################################################
 set -uo pipefail
 
+for a in "$@"; do case "$a" in
+  --help|-h) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *) echo "ci-local: unknown argument: $a (try --help)" >&2; exit 2 ;;
+esac; done
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)" \
   || { echo "ci-local: cannot resolve script directory" >&2; exit 1; }
 ROOT="$(dirname -- "$SCRIPT_DIR")"

@@ -20,7 +20,7 @@ for a in "$@"; do
   case "$a" in
     --check) SEEN_CHECK=1 ;;
     --write) SEEN_WRITE=1 ;;
-    --help|-h) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "update-bootstrap-checksums: unknown argument: $a (try --help)" >&2; exit 2 ;;
   esac
 done

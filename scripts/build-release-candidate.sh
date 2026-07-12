@@ -32,7 +32,7 @@ for a in "$@"; do
     --check)         CHECK=1 ;;
     --output-dir=*)  OUT_PARENT="${a#*=}" ;;
     --keep-partial)  KEEP_PARTIAL=1 ;;
-    --help|-h) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) echo "build-release-candidate: unknown flag: $a (try --help)" >&2; exit 2 ;;
     *)   echo "build-release-candidate: unexpected argument: $a (try --help)" >&2; exit 2 ;;
   esac
