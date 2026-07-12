@@ -395,3 +395,84 @@ and no seam is added solely for testing.
 - **Remote CI** — not run (no push). Static workflow validation plus local
   parity (`scripts/ci-local.sh`) only; the operator runbook is
   `docs/REMOTE_CI_VERIFICATION.md`.
+
+## Session 7 follow-up (main @ 711c23b + auto/repo-readiness-fixes)
+
+The session opened with an interruption recovery: state was reconstructed
+into `reports/session-7-recovery.md`, and the in-flight security finding was
+root-caused **before** any code change. Commits this session: `b0a8eda`
+(prompt hardening + regression test), `9526e80` (recovery report + baseline
+evidence), `5a0d1f6` (README layout), `818daca` (docs flag forms),
+`4f64be3` (test hermeticity), `a2ed5e8` (`--help` banners + checksums).
+
+- **F17 — INFORMATIONAL — backlog-derived data in prompt construction
+  (verified inert; hardened structurally).** The in-flight finding suspected
+  command substitution in the unquoted heredoc that builds the agent prompt
+  from BACKLOG.md text. Root cause: bash performs substitution on the
+  literal heredoc text but never rescans parameter-expanded values, so a
+  `$(...)`/backtick payload in `$text` is written literally and never
+  executes — proven both in a minimal case and on the full dispatch path
+  (evidence in `reports/session-7-recovery.md`). Hardened anyway: all
+  backlog-derived values now route through `printf %s` with a
+  quoted-heredoc static body — byte-identical output for benign input, and
+  the invariant is structural instead of incidental (safe against future
+  `eval`/`sh -c`/`echo -e` edits). Pinned by regression test 6f;
+  timeout-path block renumbered 6f→6g.
+- **F18 — LOW — test fixtures inherited the host's `commit.gpgsign`
+  (FIXED).** `mk_ws` created fixture repos without overriding the host's
+  global `commit.gpgsign=true`, so fixture commits signed with the
+  operator's real `~/.gnupg` keyring — a hermeticity break that also failed
+  the suite with gpg lock errors. Action: `mk_ws` sets
+  `commit.gpgsign false` (`tests/run_tests.sh:122-123`), matching the
+  existing `mk_rc_clone` convention (`:1000-1001`). Verification: full
+  suite green with zero gpg interaction (`evidence/session-7/ci-parity.txt`).
+- **F19 — LOW — `--help` handlers printed script source past the banner
+  (FIXED).** Three handlers used stale `sed -n '2,Np'` ranges after earlier
+  banner edits — dev-setup `2,20`, apps-setup `2,22`, autodev `2,20` —
+  printing `set -uo pipefail` and section headers after the banner,
+  violating the CLI contract ("prints the header comment block"). Ranges
+  corrected to `2,16` / `2,17` / `2,15` (bootstrap's `2,15` was already
+  exact). Contract now pinned by a suite assertion: every `--help` line
+  must end with `#` after the prefix strip. Checksum manifest and the
+  embedded digests in `pixel-bootstrap.sh` refreshed in lockstep.
+- **Unknown-flag-on-stdout — reviewed, no action.** The `Unknown flag: …`
+  line goes to stdout in some scripts; confirmed a documented contract
+  decision (`docs/CLI_CONTRACT.md` §1: "the unknown-flag line is historical
+  `stdout` (both exit 2)"), not a defect.
+- **Documentation consistency — verified.** Living docs fixed to the
+  verifier's equals-only flag forms (`818daca`; the Session 6 report keeps
+  its historical wording deliberately); README repo layout current
+  (`5a0d1f6`). Final sweep: zero space-form bundle-verifier invocations
+  remain in `docs/` or README; harness §28 doc contracts green.
+- **Dependency audit — no new dependencies.** External command inventory
+  unchanged in kind: `git`, `ssh`/`sshd`, `pkg`/`apt` (Termux/proot layer),
+  `curl` (installers only — F8/R1 status quo), `gpg`/`gpgv` (signature
+  verification; tests and CI use throwaway ed25519 fixtures), `jq`,
+  `node`/`npm`, `python3`/`uv`, `sha256sum`, GNU `timeout`, coreutils
+  (`stat`/`find`/`mktemp`). No new third-party code, no version changes.
+- **Security review — invariants hold.** All 18 release/security invariants
+  re-verified by the full suite (§24–§28) at the session tip: 288 passed /
+  0 failed / 0 skipped. The session's only security-relevant code change
+  converted an incidentally-safe path into a structurally-safe one (F17).
+- **Reproducibility — re-proven at the session tip.** Two
+  `SOURCE_DATE_EPOCH=1700000000` builds from `a2ed5e8` are byte-identical
+  (content, modes, mtimes; `evidence/session-7/reproducibility.txt`).
+- **Release validation — re-run at the session tip.** Fixture build `0.0.0`
+  from a clean clone of `a2ed5e8`: unsigned verify verdict
+  `verified-integrity-only`, signed fixture verify (throwaway ed25519)
+  verdict `verified-signed`, both exit 0
+  (`evidence/session-7/release-verify.txt`).
+- **Performance — measured, profile unchanged.** Full gate chain 4–9 min on
+  this host (thermal throttling; `evidence/session-7/test-timings.txt`);
+  isolated components stay fast (clone ≈2s, builder ≈3s, verifier ≈3s). No
+  assertions removed, no harness filters added.
+- **Technical-debt inventory.** R-register: R2/R3/R5/R6 implemented
+  (Session 3); R1 (installer checksum pinning — needs upstream-published
+  checksums plus a network fixture) and R4 (`--` end-of-options — no
+  concrete need) remain deferred, unchanged. No new R-items. Host-level
+  observation, outside repo scope: stale `~/.gnupg` lock files from killed
+  gpg processes; reported to the operator, left untouched.
+- **Remote CI — not run (no push).** Local parity (`scripts/ci-local.sh`)
+  at the session tip: ALL GATES PASSED (5/5)
+  (`evidence/session-7/ci-parity.txt`). Operator runbook unchanged:
+  `docs/REMOTE_CI_VERIFICATION.md`.
