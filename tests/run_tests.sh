@@ -7,7 +7,11 @@
 #  this harness) · --help/flag contract · .pixel-lab.json validity ·          #
 #  pixel-autodev.sh behaviour (dry-run, seeding, --timeout contract,          #
 #  end-to-end success/timeout paths via stub agents) · CLI contract extras ·  #
-#  clean-clone smoke. Hermetic: no network, no paid agents, no repo writes.   #
+#  clean-clone smoke · ssh-port / numeric / --agent flag contracts ·          #
+#  checksum manifest lockstep · release-candidate builder · bundle verifier   #
+#  (unsigned + signed fixtures + failure injection) · reproducibility ·       #
+#  CI workflow parity · release docs contracts · repository readiness.        #
+#  Hermetic: no network, no paid agents, no repo writes.                      #
 #                                                                             #
 #  Usage: bash tests/run_tests.sh        (exit 0 = all green)                 #
 #  Set PIXEL_TESTS_NO_CLONE=1 to skip the nested clean-clone smoke test.      #
@@ -36,7 +40,11 @@ SCRIPTS=(pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev
 # process substitution — /dev/fd is absent on some supported environments.
 lint_files="$(git ls-files '*.sh' 2>/dev/null)" || lint_files=
 if [ -z "$lint_files" ]; then
-  lint_files="$(printf '%s\n' pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh tests/run_tests.sh)"
+  lint_files="$(printf '%s\n' \
+    pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh \
+    tests/run_tests.sh \
+    scripts/verify-bootstrap-signature.sh scripts/update-bootstrap-checksums.sh \
+    scripts/ci-local.sh scripts/build-release-candidate.sh scripts/verify-release-bundle.sh)"
 fi
 
 echo "== pixel-development test suite =="
@@ -261,6 +269,19 @@ if [ $rc -eq 2 ]; then t_ok "bootstrap bare '--repo-base' rejected with exit 2";
 bash "$ROOT/pixel-bootstrap.sh" -- >/dev/null 2>&1; rc=$?
 if [ $rc -eq 2 ]; then t_ok "bootstrap '--' currently rejected as unknown flag"; else t_fail "'--' handling" "rc=$rc (want 2)"; fi
 
+# --- 8. clean-clone smoke (fast, hermetic, non-recursive) -------------------------
+if [ "${PIXEL_TESTS_NO_CLONE:-0}" = 1 ]; then
+  t_skip "clean-clone smoke (nested run)"
+else
+  clone="$tmp/clean clone"
+  if git clone -q --local "$ROOT" "$clone" 2>/dev/null \
+     && ( cd "$clone" && PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh >/dev/null 2>&1 ); then
+    t_ok "clean-clone smoke: suite passes from a fresh clone"
+  else
+    t_fail "clean-clone smoke: suite must pass from a fresh clone"
+  fi
+fi
+
 # --- 9. --ssh-port contract (pixel-apps-setup.sh) --------------------------------
 # Throwaway HOME (with a space): any side effect (the log file) becomes
 # observable. Valid ports pass validation and reach the Termux preflight,
@@ -308,19 +329,6 @@ out="$(run_apps --ssh-port=abc --ssh-port=2000 2>&1)"; rc=$?
 if [ $rc -eq 1 ]; then t_ok "duplicate --ssh-port: later valid overrides earlier invalid"; else t_fail "duplicate ssh-port valid-last" "rc=$rc"; fi
 err="$(run_apps --ssh-port=2000 --ssh-port=abc 2>&1 >/dev/null)"; rc=$?
 if [ $rc -eq 2 ]; then t_ok "duplicate --ssh-port: later invalid rejected (last-wins validated)"; else t_fail "duplicate ssh-port invalid-last" "rc=$rc"; fi
-
-# --- 8. clean-clone smoke (fast, hermetic, non-recursive) -------------------------
-if [ "${PIXEL_TESTS_NO_CLONE:-0}" = 1 ]; then
-  t_skip "clean-clone smoke (nested run)"
-else
-  clone="$tmp/clean clone"
-  if git clone -q --local "$ROOT" "$clone" 2>/dev/null \
-     && ( cd "$clone" && PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh >/dev/null 2>&1 ); then
-    t_ok "clean-clone smoke: suite passes from a fresh clone"
-  else
-    t_fail "clean-clone smoke: suite must pass from a fresh clone"
-  fi
-fi
 
 # --- 10. numeric flag contract (pixel-autodev.sh) --------------------------------
 # 10a-c. malformed values are usage errors (exit 2, flag named on stderr) BEFORE
