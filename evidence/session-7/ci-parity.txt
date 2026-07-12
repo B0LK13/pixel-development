@@ -1,0 +1,319 @@
+== session-7 ci-local parity (final validation gate chain) ==
+date: 2026-07-12T17:49:44+00:00
+commit: e98a18d5bc693243fcf9365265aa9f74fd63ec71 (auto/repo-readiness-fixes) — session-7 tip incl. audit addendum
+
+
+== [1/5] whitespace + conflict markers — git diff --check
+   ok git diff --check
+
+== [2/5] checksum manifest lockstep — update-bootstrap-checksums.sh --check
+  ok   manifest: pixel-apps-setup.sh
+  ok   manifest: pixel-bootstrap.sh
+  ok   manifest: pixel-dev-setup.sh
+  ok   embedded: pixel-dev-setup.sh
+  ok   embedded: pixel-apps-setup.sh
+checksum manifest is current (3 artifacts, embedded digests in lockstep)
+   ok checksum --check
+
+== [3/5] shell syntax — bash -n (every tracked shell script)
+   ok bash -n (10 scripts)
+
+== [4/5] shellcheck -S warning (every tracked shell script)
+   ok shellcheck
+
+== [5/5] full test suite — bash tests/run_tests.sh
+== pixel-development test suite ==
+  ok    required file present: pixel-bootstrap.sh
+  ok    required file present: pixel-dev-setup.sh
+  ok    required file present: pixel-apps-setup.sh
+  ok    required file present: pixel-autodev.sh
+  ok    required file present: scripts/verify-bootstrap-signature.sh
+  ok    required file present: scripts/update-bootstrap-checksums.sh
+  ok    required file present: scripts/ci-local.sh
+  ok    required file present: scripts/build-release-candidate.sh
+  ok    required file present: scripts/verify-release-bundle.sh
+  ok    required file present: config/bootstrap-checksums.txt
+  ok    required file present: .pixel-lab.json
+  ok    syntax: pixel-apps-setup.sh
+  ok    syntax: pixel-autodev.sh
+  ok    syntax: pixel-bootstrap.sh
+  ok    syntax: pixel-dev-setup.sh
+  ok    syntax: scripts/build-release-candidate.sh
+  ok    syntax: scripts/ci-local.sh
+  ok    syntax: scripts/update-bootstrap-checksums.sh
+  ok    syntax: scripts/verify-bootstrap-signature.sh
+  ok    syntax: scripts/verify-release-bundle.sh
+  ok    syntax: tests/run_tests.sh
+  ok    shellcheck: pixel-apps-setup.sh
+  ok    shellcheck: pixel-autodev.sh
+  ok    shellcheck: pixel-bootstrap.sh
+  ok    shellcheck: pixel-dev-setup.sh
+  ok    shellcheck: scripts/build-release-candidate.sh
+  ok    shellcheck: scripts/ci-local.sh
+  ok    shellcheck: scripts/update-bootstrap-checksums.sh
+  ok    shellcheck: scripts/verify-bootstrap-signature.sh
+  ok    shellcheck: scripts/verify-release-bundle.sh
+  ok    shellcheck: tests/run_tests.sh
+  ok    --help exits 0 with usage: pixel-bootstrap.sh
+  ok    --help prints banner only, no source leak: pixel-bootstrap.sh
+  ok    unknown flag exits 2: pixel-bootstrap.sh
+  ok    --help exits 0 with usage: pixel-dev-setup.sh
+  ok    --help prints banner only, no source leak: pixel-dev-setup.sh
+  ok    unknown flag exits 2: pixel-dev-setup.sh
+  ok    --help exits 0 with usage: pixel-apps-setup.sh
+  ok    --help prints banner only, no source leak: pixel-apps-setup.sh
+  ok    unknown flag exits 2: pixel-apps-setup.sh
+  ok    --help exits 0 with usage: pixel-autodev.sh
+  ok    --help prints banner only, no source leak: pixel-autodev.sh
+  ok    unknown flag exits 2: pixel-autodev.sh
+  ok    .pixel-lab.json declares name/stack/test
+  ok    autodev --dry-run parses task and slugifies branch
+  ok    dry-run leaves the backlog untouched
+  ok    autodev seeds BACKLOG.md + PIXEL_AGENT.md when absent
+  ok    rejects invalid --timeout=0 (exit 2, clear message)
+  ok    rejects invalid --timeout=-5 (exit 2, clear message)
+  ok    rejects invalid --timeout=abc (exit 2, clear message)
+  ok    rejects invalid --timeout= (exit 2, clear message)
+  ok    policy line shows timeout=1200s
+  ok    policy line shows timeout=45s
+  ok    policy line shows timeout=90s
+  ok    policy line shows timeout=99999999s
+  ok    timeout(1) enforces limit, returns 124
+  ok    claude + codex both wrapped in timeout "$TIMEOUT"
+  ok    success path: stub agent committed on green, backlog flipped
+  ok    backlog task text is inert (prompt built without shell expansion of data)
+  ok    claude backend: 1s timeout kills stub, branch reverted, task stays open
+  ok    codex backend: 1s timeout kills stub, branch reverted, task stays open
+  ok    apps-setup '--ssh-port 9022' (space form) rejected with exit 2
+  ok    autodev bare '--timeout' rejected with exit 2
+  ok    bootstrap bare '--repo-base' rejected with exit 2
+  ok    bootstrap '--' currently rejected as unknown flag
+  ok    rejects invalid --ssh-port=0 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=65536 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=-1 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=abc (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port= (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=22x (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port= 22 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=22;reboot (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=+22 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=99999 (exit 2, stderr names flag)
+  ok    rejects invalid --ssh-port=100000 (exit 2, stderr names flag)
+  ok    invalid ports create no log file (validation precedes side effects)
+  ok    accepts --ssh-port=1 (validation passed, reached preflight)
+  ok    accepts --ssh-port=22 (validation passed, reached preflight)
+  ok    accepts --ssh-port=65535 (validation passed, reached preflight)
+  ok    accepts --ssh-port=8022 (validation passed, reached preflight)
+  ok    accepts --ssh-port=08022 (validation passed, reached preflight)
+  ok    accepts --ssh-port=008022 (validation passed, reached preflight)
+  ok    duplicate --ssh-port accepted (last-wins, documented)
+  ok    duplicate --ssh-port: later valid overrides earlier invalid
+  ok    duplicate --ssh-port: later invalid rejected (last-wins validated)
+  ok    clean-clone smoke: suite passes from a fresh clone
+  ok    rejects invalid --max-tasks='0' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='-1' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='abc' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks=' 3' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='3;rm' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-tasks='1000000' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='0' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='-5' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='abc' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --max-turns='1x' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='abc' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='-1' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='0' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='0.00' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='1.2.3' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='.5' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='2.' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --budget='1;rm' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --timeout='000' (exit 2 before preflight, stderr names flag)
+  ok    --timeout=08 accepted (leading zeros tolerated, no octal trap)
+  ok    policy line shows max-turns=7
+  ok    policy line shows max-turns=7
+  ok    policy line shows budget/task=$0.50
+  ok    policy line shows budget/task=$2.00
+  ok    policy line shows budget/task=$10
+  ok    policy line shows max-turns=030
+  ok    --max-tasks=08 canonicalised to 8 (octal-safe loop bound)
+  ok    duplicate --max-tasks: last wins (9 then 1 → 1)
+  ok    invalid --max-tasks creates no .autodev state and seeds nothing
+  ok    rejects invalid --agent='foo' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='CLAUDE' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='Claude' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='claude2' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='claude;rm' (exit 2 before preflight, stderr names flag)
+  ok    rejects invalid --agent='claude ' (exit 2 before preflight, stderr names flag)
+  ok    accepts --agent=claude
+  ok    accepts --agent=codex
+  ok    duplicate --agent: later valid overrides earlier invalid
+  ok    duplicate --agent: later invalid rejected (last-wins validated)
+  ok    '--' rejected as unknown flag: pixel-dev-setup.sh
+  ok    '--' rejected as unknown flag: pixel-apps-setup.sh
+  ok    '--' rejected as unknown flag: pixel-autodev.sh
+  ok    '-- --help' still exit 2 ('--' does not enable pass-through): pixel-bootstrap.sh
+  ok    positional argument rejected: pixel-bootstrap.sh
+  ok    '-- --help' still exit 2 ('--' does not enable pass-through): pixel-dev-setup.sh
+  ok    positional argument rejected: pixel-dev-setup.sh
+  ok    '-- --help' still exit 2 ('--' does not enable pass-through): pixel-apps-setup.sh
+  ok    positional argument rejected: pixel-apps-setup.sh
+  ok    '-- --help' still exit 2 ('--' does not enable pass-through): pixel-autodev.sh
+  ok    positional argument rejected: pixel-autodev.sh
+  ok    trailing positional after valid flag rejected: pixel-autodev.sh
+  ok    dry-run skips agent resolution (no paid-agent executable required)
+  ok    non-dry-run resolves the agent in preflight (dispatch stays stub-pinned)
+  ok    .gitattributes pins LF endings (text=auto eol=lf)
+  ok    git check-attr confirms eol=lf for tracked scripts
+  ok    preflight fails closed: GNU timeout (coreutils) is required (exit 1, no state created)
+  ok    preflight fails closed: git not installed in devbox (exit 1, no state created)
+  ok    preflight fails closed: 'claude' not found (exit 1, no state created)
+  ok    preflight fails closed: 'codex' not found (exit 1, no state created)
+  ok    usage error (exit 2) precedes dependency resolution
+  ok    dry-run requires no agent executable even via the seam
+  ok    path override resolves (/bin/true as timeout)
+  ok    bare-name override resolves through PATH; dispatch runs the stub
+  ok    metacharacter seam value is never executed (quoted throughout)
+  ok    checksum manifest exists and covers all three pinned artifacts
+  ok    manifest pin matches repo content: pixel-dev-setup.sh (lockstep)
+  ok    embedded digest matches manifest: pixel-dev-setup.sh
+  ok    manifest pin matches repo content: pixel-apps-setup.sh (lockstep)
+  ok    embedded digest matches manifest: pixel-apps-setup.sh
+  ok    manifest pin matches repo content: pixel-bootstrap.sh (anchor lockstep)
+  ok    no unverified curl|bash in bootstrap downloads (only chartered updater shortcut remains)
+  ok    downloads land in a temp file, never directly in $DEST
+  ok    valid downloads verify (sha256) and install
+  ok    shortcuts created only after verified installs
+  ok    checksum mismatch fails closed (no install, no shortcuts, no temp)
+  ok    failed download installs no partial content (temp cleaned)
+  ok    missing checksum entry fails closed (apps-setup not installed)
+  ok    metacharacter repo-base value is never executed
+  ok    README §1 pins a full-commit URL and a SHA-256
+  ok    README pin digest == sha256 of the pinned git object
+  ok    README §1 primary block has no pipe-to-shell
+  ok    PIXEL_REPO_BASE pins the same immutable commit
+  ok    valid detached signature verifies (gpgv)
+  ok    tampered artifact fails signature verification (exit 1)
+  ok    untrusted keyring rejects a genuine signature
+  ok    missing signature file is a clear error
+  ok    missing gpgv fails with a named dependency (exit 1)
+  ok    signature helper: no args is a usage error (exit 2)
+  ok    signature helper: unknown flag is a usage error (exit 2)
+  ok    metacharacter GPGV_BIN value is never executed
+  ok    checksum tool: current manifest passes --check (path with spaces)
+  ok    checksum tool: stale manifest fails --check naming the artifact
+  ok    checksum tool: --write repairs stale manifest+embedded (no temp leftovers)
+  ok    checksum tool: missing artifact fails clearly
+  ok    checksum tool: malformed manifest line rejected
+  ok    checksum tool: duplicate manifest entry rejected
+  ok    checksum tool: unexpected artifact name rejected
+  ok    checksum tool: deterministic sorted order; second --write changes nothing
+  ok    checksum tool: symlink artifact refused
+  ok    checksum tool: --check is non-mutating on a stale manifest
+  ok    checksum tool: failed --write leaves manifest byte-identical (no partial state)
+  ok    checksum tool: embedded/manifest mismatch detected
+  ok    checksum tool: unknown argument is a usage error (exit 2)
+  ok    checksum tool: --check --write conflict is a usage error (exit 2)
+  ok    checksum tool: --check passes from a clean clone
+  ok    release doc: 'current' pin-history row matches the pinned git object
+  ok    release doc: rollback path + operator-owned publishing documented
+  ok    workflow: valid-YAML hygiene (no tabs), least-privilege permissions
+  ok    CI parity: gate in workflow AND ci-local.sh: git diff --check
+  ok    CI parity: gate in workflow AND ci-local.sh: bash scripts/update-bootstrap-checksums.sh --check
+  ok    CI parity: gate in workflow AND ci-local.sh: bash tests/run_tests.sh
+  ok    workflow triggers cover main + auto/* integration branches
+  ok    workflow invokes no paid agent and uses no secret context
+  ok    ci-local.sh preserves failing step exit status and cds to repo root
+  ok    workflow: release-candidate-check job exists with a bounded timeout
+  ok    workflow release job exercises: SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh
+  ok    workflow release job exercises: bash scripts/verify-release-bundle.sh
+  ok    workflow release job exercises: --require-signature
+  ok    workflow release job exercises: diff -r
+  ok    CI parity: release mechanisms also covered by the hermetic suite (ci-local gate 5)
+  ok    workflow release job publishes nothing and pushes nothing
+  ok    SIGTERM mid-download: bootstrap exits and temp download dir is cleaned
+  ok    INT/TERM traps route through the EXIT trap (cleanup on signals)
+  ok    installed scripts are executable with deliberate permissions (755/755)
+  ok    download-then-verify order pinned (redirect-safe by construction)
+  ok    shipped manifest passes its own checksum gate
+  ok    rc build: exact 9-file bundle layout
+  ok    rc build: deliberate modes (755 scripts / 644 data)
+  ok    rc metadata: schema fields valid (semver, full commit, sha256, openpgp-detached)
+  ok    rc metadata: artifacts sorted, digests match files, mode/role consistent
+  ok    rc signing manifest: binds commit+version+metadata digest+artifact hashes
+  ok    rc SHA256SUMS verifies against bundle files
+  ok    rc INSTALL.md: commit-pinned verified flow, digest matches, no pipe-to-shell
+  ok    rc VERIFY.md: integrity-only labelled, signed path + policy shown
+  ok    rc usage: malformed version '1.0' exits 2 with no output
+  ok    rc usage: malformed version 'abc' exits 2 with no output
+  ok    rc usage: malformed version '1.0.0.0' exits 2 with no output
+  ok    rc usage: malformed version '' exits 2 with no output
+  ok    rc usage: malformed version '1.0.x' exits 2 with no output
+  ok    rc usage: malformed version 'v1.0.0' exits 2 with no output
+  ok    rc usage: missing --version exits 2
+  ok    rc usage: unknown flag exits 2
+  ok    rc: dirty tree rejected (exit 1, no bundle, no temp leftovers)
+  ok    rc: stale checksum manifest rejected atomically (exit 1, no bundle)
+  ok    rc: missing artifact rejected (exit 1)
+  ok    rc: symlink artifact rejected (exit 1)
+  ok    rc: existing output dir rejected without clobber (exit 1)
+  ok    rc --check: validates, exits 0, writes nothing
+  ok    rc: SOURCE_DATE_EPOCH pins created_at deterministically
+  ok    rc: bundle contains no absolute host paths
+  ok    verify: unsigned bundle → verified-integrity-only (authenticity NOT claimed)
+  ok    verify: --require-signature without signature → failed-policy
+  ok    verify: missing bundle dir → failed-layout
+  ok    verify: unexpected entry → failed-layout
+  ok    verify: symlink entry → failed-layout
+  ok    verify: directory entry → failed-layout
+  ok    verify: missing core file → failed-layout
+  ok    verify: metadata missing required key → failed-metadata
+  ok    verify: unsupported schema version → failed-metadata
+  ok    verify: abbreviated commit → failed-metadata
+  ok    verify: duplicate artifact entry → failed-metadata
+  ok    verify: traversal path in metadata → failed-metadata
+  ok    verify: role/mode inconsistency → failed-metadata
+  ok    verify: unknown checksum algorithm → failed-metadata
+  ok    verify: altered artifact → failed-checksum
+  ok    verify: mode drift → failed-checksum
+  ok    verify: manifest/metadata version mismatch → failed-metadata
+  ok    verify: altered metadata breaks manifest binding → failed-metadata
+  ok    verify: SHA256SUMS disagreement → failed-checksum
+  ok    verify usage: missing --bundle exits 2
+  ok    verify usage: unknown flag exits 2
+  ok    verify usage: --signature without --keyring exits 2
+  ok    verify: metacharacter --bundle value is never executed
+  ok    verify: unverified .asc noted, verdict stays integrity-only
+  ok    verify-signed: valid signature + matching keyring → verified-signed
+  ok    verify-signed: valid signature with --require-signature → verified-signed
+  ok    verify-signed: corrupted signature fails closed
+  ok    verify-signed: wrong public key → failed-signature
+  ok    verify-signed: altered signed manifest → failed-signature
+  ok    verify-signed: valid signature + altered artifact → failed-checksum
+  ok    verify-signed: valid signature + altered metadata → failed-metadata
+  ok    verify-signed: bundle .asc auto-detected with --keyring → verified-signed
+  ok    verify-signed: signature over the wrong file → failed-signature
+  ok    verify-signed: required signature + no keyring → failed-policy
+  ok    verify-signed: metacharacter --keyring value is never executed
+  ok    reproducibility: two SDE-pinned builds are byte-identical (content, modes, mtimes)
+  ok    reproducibility: different SDE changes only metadata+manifest (payload stable)
+  ok    reproducibility: non-numeric SOURCE_DATE_EPOCH rejected (exit 1, no bundle)
+  ok    RELEASE_SIGNING.md: sign/verify commands + signature-never-replaces-checksums policy
+  ok    SIGNING_KEY_LIFECYCLE.md: lifecycle covered, no key material, fixtures marked non-production
+  ok    REMOTE_CI_VERIFICATION.md: gh inspection + branch cleanup + merge criteria
+  ok    release docs contain no pipe-to-shell installation
+  ok    README §11 links the release signing, key lifecycle, and remote CI docs
+  ok    BOOTSTRAP_RELEASE_PROCESS.md documents the archive-handling decision
+  ok    verify-release-bundle.sh is side-effect free (bundle byte-identical after verify)
+  ok    README §10 repo layout lists all release-relevant directories
+  ok    docs reference release scripts by their scripts/ path
+
+passed: 288   failed: 0   skipped: 0
+
+ci-local: ALL GATES PASSED
+
+ci-local exit: 0
