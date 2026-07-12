@@ -1,0 +1,55 @@
+== session-8 final status ==
+date: 2026-07-12T21:17:39+00:00
+branch: auto/integrate-session-8
+tip: 65f9d83af44b4158ef3c733eb1c90be6841b8eee
+commit: d11ae8f43c6039d6cadac4bdc15126439c3ea439 (gates/evidence captured at this commit; any later commits are evidence/report-only)
+main: 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c (expected 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c)
+working tree: clean
+private key material in repo: 1 file(s) (expected 0)
+
+== deliverables ==
+MISSING: evidence/session-8/final-status.txt
+
+== verification summary (captured values) ==
+suite: passed: 309   failed: 0   skipped: 0
+parity: ci-local exit: 0
+unsigned verify exit: 0
+signed fixture verify exit: 0
+reproducibility: CONCLUSION: byte-for-byte reproducible when SOURCE_DATE_EPOCH is fixed.
+
+== session-8 commit list (e4304d5..tip) ==
+66aedb9 fix: use equals-form release flags in the CI release job
+40f4743 chore: add session 8 baseline record and timing evidence
+97dc178 refactor: drop subsumed die2 pre-check in the version validator
+6ea4dc2 test(harness): restore lint fallback coverage, unswap §8/§9, refresh header
+874803a docs(reports): add session 8 architecture review
+dcd3bb3 fix: never mark a task done when git commit fails
+884abe9 docs: correct stale pixel-autodev.sh line refs in CLI_CONTRACT
+c306e7f fix: fail closed when the download temp dir cannot be created
+08f665e docs(reports): add session 8 configuration-quality review
+bca1858 fix: end release-script --help ranges at the banner border + ci-local arg handling
+df25374 test(harness): extend §3 --help/banner/unknown-flag contract to release tools
+564a1e1 fix: append install hints to the two bare missing-tool deaths
+676498f docs: README parity+knobs block, bash >=4 floor, release-checklist bundle bridge, new contributor/operator docs
+aebfef3 docs(reports): add session 8 developer-experience review
+40b5a2a docs(reports): add session 8 CI efficiency analysis
+40afce1 docs(reports): add session 8 diagnostics review
+6d0f018 docs(reports): add session 8 technical-debt register and project roadmap
+1d5406d Merge branch 'auto/session-8-architecture' into auto/integrate-session-8
+ce1ce3f Merge branch 'auto/session-8-config-quality' into auto/integrate-session-8
+54c96b1 Merge branch 'auto/session-8-ci-efficiency' into auto/integrate-session-8
+7d9c70f Merge branch 'auto/session-8-developer-experience' into auto/integrate-session-8
+ac906e1 Merge branch 'auto/session-8-docs-roadmap' into auto/integrate-session-8
+f3ebd61 Merge branch 'auto/integrate-session-8' into auto/session-8-diagnostics
+4d3a689 fix(bootstrap): fail closed on copy/install errors, per-branch opener status (D1/D2)
+8b4dbff fix(apps-setup): log FATAL on die for post-mortem diagnosis (D4)
+d375548 test(harness): failed-test recap, nested-clone log capture, D1/D2/D4 pins
+d7ec726 docs(reports): record D1-D4 implementation with commit refs and test pins
+d11ae8f Merge branch 'auto/session-8-diagnostics' into auto/integrate-session-8
+1170628 chore: add session 8 final evidence and completion report
+65f9d83 Merge branch 'auto/session-8-evidence' into auto/integrate-session-8
+
+== untouched surfaces ==
+- main unmoved; no push/tag/publish; no remote contacted
+- no production signing material in source, tests, fixtures, logs, or CI
+- global git/GPG state untouched; fixture keyrings throwaway and removed
