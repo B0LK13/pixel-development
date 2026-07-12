@@ -1,11 +1,10 @@
 == session-8 final status ==
-date: 2026-07-12T21:18:46+00:00
+date: 2026-07-12T21:19:34+00:00
 branch: auto/integrate-session-8
-tip: 5a849c66708840e234cbf84483a9d16cf094f26b
-commit: d11ae8f43c6039d6cadac4bdc15126439c3ea439 (gates/evidence captured at this commit; any later commits are evidence/report-only)
+capture tip: 3bbb205243bf7438c0e8dbe16e77f310a0b77e95 (this file is committed as its child; the delta is this file only)
+commit: d11ae8f43c6039d6cadac4bdc15126439c3ea439 (gates/evidence captured at this commit; later commits are evidence/report-only)
 main: 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c (expected 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c)
-working tree: DIRTY
- M reports/session-8-final-report.md
+working tree: clean
 private key material in repo: 0 file(s) (expected 0)
 
 == deliverables ==
@@ -50,6 +49,7 @@ d11ae8f Merge branch 'auto/session-8-diagnostics' into auto/integrate-session-8
 1170628 chore: add session 8 final evidence and completion report
 65f9d83 Merge branch 'auto/session-8-evidence' into auto/integrate-session-8
 5a849c6 chore: add session 8 final status (clean tree, deliverables, verdicts)
+3bbb205 fix: regenerate final-status after rewording the key-scan phrasing
 
 == untouched surfaces ==
 - main unmoved; no push/tag/publish; no remote contacted
