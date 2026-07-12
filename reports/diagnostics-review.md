@@ -211,3 +211,20 @@ spelunking.
   time). Line numbers cite HEAD `e4304d5` content.
 - D1–D4 are proposals only — this review modified nothing; the background
   suite was left undisturbed.
+
+## Implementation record (session 8, `auto/session-8-diagnostics`)
+
+D1–D4 were implemented after this review, each with red/green-proven pins:
+
+- **D1/D2** — `4d3a689` (`pixel-bootstrap.sh` + manifest): cp/mv failures die
+  with both paths and remediation; chmod failure warns; the `--open-store`
+  success line prints only from an actual opener branch, else a warn names the
+  manual F-Droid path. Pins: §17f (copy failure fails closed), §17g (no-opener
+  warn), §17h (opener-branch success).
+- **D3** — `d375548` (`tests/run_tests.sh`): `FAILED_TESTS` recap before the
+  summary; §8 clean-clone failure carries the nested run's last 20 lines.
+- **D4** — `8b4dbff` (`pixel-apps-setup.sh` + manifest + embedded digest):
+  `die()` logs `FATAL` to the run log, parity with dev-setup. Pin: §9d.
+
+Post-implementation targeted suite: 308 passed / 0 failed / 1 skipped
+(PIXEL_TESTS_NO_CLONE=1). D5–D11 remain deferred per the debt register.
