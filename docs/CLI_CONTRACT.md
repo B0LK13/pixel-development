@@ -205,7 +205,7 @@ Runtime dependency inventory (from the scripts themselves, not assumed):
 
 | tool | class | used by | absent behavior |
 |------|-------|---------|-----------------|
-| bash | required | all scripts (shebang) | n/a |
+| bash | required | all scripts (shebang); **≥4 for the release tooling** (`declare -A` in `scripts/update-bootstrap-checksums.sh` and `scripts/verify-release-bundle.sh`) | n/a |
 | Termux runtime (`$PREFIX` + `pkg`) | required | bootstrap / dev-setup / apps-setup preflights | `die` exit 1, "Run inside Termux…" |
 | git | required | autodev | `die` exit 1, "git not installed in devbox" |
 | `timeout` (GNU coreutils) | required | autodev agent dispatch | `die` exit 1 at preflight with a clear message |

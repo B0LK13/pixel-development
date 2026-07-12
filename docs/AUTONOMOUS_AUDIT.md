@@ -150,7 +150,10 @@ invoked; no network calls were made by the audit itself.
 - **macOS**: product scripts require Termux; additionally GNU-isms would
   break: `sed 's/…/\+/…'` in `slugify` (`pixel-autodev.sh:177`), GNU-style
   `sed -i` (`pixel-apps-setup.sh:115`), and `timeout(1)` (absent from base
-  macOS). bash 3.2 itself would mostly cope, but the sed/timeout gaps are fatal.
+  macOS). bash 3.2 itself would mostly cope with the *product* scripts, but
+  the sed/timeout gaps are fatal, and the release tooling
+  (`scripts/update-bootstrap-checksums.sh`, `scripts/verify-release-bundle.sh`)
+  requires bash ≥4 for `declare -A`.
 - **WSL**: product scripts die at the Termux preflight by design. The
   *harness* would likely run (Linux bash + coreutils), but this is untested —
   no claim.

@@ -21,7 +21,7 @@ for a in "$@"; do
   case "$a" in
     --keyring=*)   KEYRING="${a#*=}" ;;
     --signature=*) SIG="${a#*=}" ;;
-    --help|-h) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) echo "verify-bootstrap-signature: unknown flag: $a (try --help)" >&2; exit 2 ;;
     *) if [ -z "$ARTIFACT" ]; then ARTIFACT="$a"
        else echo "verify-bootstrap-signature: unexpected extra argument: $a" >&2; exit 2; fi ;;
