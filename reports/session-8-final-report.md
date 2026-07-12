@@ -230,6 +230,6 @@ repo already pins.
   final status).
 - Nothing pushed, tagged, or published; no remote contacted.
 - No production signing material in source, tests, fixtures, logs, or CI
-  (`PRIVATE KEY BLOCK` scan: 0 files).
+  (private-key armor scan: 0 files).
 - Global git/GPG state untouched; fixture keyrings throwaway and removed.
 - All commits GPG-signed per repository policy.
