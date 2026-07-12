@@ -21,7 +21,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || { echo "cannot cd to repo root: $ROOT" >&2; exit 1; }
 
-PASS=0; FAIL=0; SKIP=0
+PASS=0; FAIL=0; SKIP=0; FAILED_TESTS=()
 # Optional per-test profiler (session 5): PIXEL_TEST_TIMINGS=1 prints elapsed
 # seconds since the previous test to stderr. Default behaviour is untouched.
 if [ "${PIXEL_TEST_TIMINGS:-0}" = 1 ]; then
@@ -31,7 +31,7 @@ else
   _tt_mark(){ :; }
 fi
 t_ok(){   PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; _tt_mark "$1"; }
-t_fail(){ FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | head -20 | sed 's/^/        /'; _tt_mark "FAIL $1"; }
+t_fail(){ FAIL=$((FAIL+1)); FAILED_TESTS+=("$1"); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | head -20 | sed 's/^/        /'; _tt_mark "FAIL $1"; }
 t_skip(){ SKIP=$((SKIP+1)); printf '  skip  %s\n' "$1"; _tt_mark "skip $1"; }
 
 SCRIPTS=(pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh)
@@ -312,10 +312,11 @@ if [ "${PIXEL_TESTS_NO_CLONE:-0}" = 1 ]; then
 else
   clone="$tmp/clean clone"
   if git clone -q --local "$ROOT" "$clone" 2>/dev/null \
-     && ( cd "$clone" && PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh >/dev/null 2>&1 ); then
+     && ( cd "$clone" && PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh >"$tmp/nested-clone.log" 2>&1 ); then
     t_ok "clean-clone smoke: suite passes from a fresh clone"
   else
-    t_fail "clean-clone smoke: suite must pass from a fresh clone"
+    t_fail "clean-clone smoke: suite must pass from a fresh clone" \
+      "last lines of the nested run:"$'\n'"$(tail -20 "$tmp/nested-clone.log" 2>/dev/null)"
   fi
 fi
 
@@ -366,6 +367,15 @@ out="$(run_apps --ssh-port=abc --ssh-port=2000 2>&1)"; rc=$?
 if [ $rc -eq 1 ]; then t_ok "duplicate --ssh-port: later valid overrides earlier invalid"; else t_fail "duplicate ssh-port valid-last" "rc=$rc"; fi
 err="$(run_apps --ssh-port=2000 --ssh-port=abc 2>&1 >/dev/null)"; rc=$?
 if [ $rc -eq 2 ]; then t_ok "duplicate --ssh-port: later invalid rejected (last-wins validated)"; else t_fail "duplicate ssh-port invalid-last" "rc=$rc"; fi
+
+# 9d. die() records FATAL in the log file (session 8, D4): every 9b run dies in
+#     the Termux preflight after the log file is created, so the throwaway-HOME
+#     log must carry the FATAL line for post-mortem diagnosis.
+if grep -q 'FATAL .*Run inside Termux' "$apps_home/pixel-apps-setup.log" 2>/dev/null; then
+  t_ok "apps-setup die() records FATAL in the log file"
+else
+  t_fail "apps-setup die() must log FATAL" "$(tail -3 "$apps_home/pixel-apps-setup.log" 2>/dev/null)"
+fi
 
 # --- 10. numeric flag contract (pixel-autodev.sh) --------------------------------
 # 10a-c. malformed values are usage errors (exit 2, flag named on stderr) BEFORE
@@ -709,6 +719,52 @@ if [ $rc -eq 1 ] && [ ! -e "$pwn" ]; then
   t_ok "metacharacter repo-base value is never executed"
 else
   t_fail "repo-base injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"
+fi
+
+# 17f. copy-from-search-dir failure fails closed (session 8, D1): the DEST
+#      entry is an unresolvable symlink loop, so cp cannot succeed — die must
+#      name both paths and no shortcut files may be created.
+h17f="$(mktemp -d "${tmp}/boot home.XXXXXX")"
+mkdir -p "$h17f/.local/share/pixel"
+ln -s pixel-dev-setup.sh "$h17f/.local/share/pixel/pixel-dev-setup.sh"
+cp "$ROOT/pixel-dev-setup.sh" "$h17f/pixel-dev-setup.sh"
+out="$(cd "$tmp" && env HOME="$h17f" PREFIX="$h17f/prefix" PATH="$APATH" bash "$ROOT/pixel-bootstrap.sh" 2>&1)"; rc=$?
+if [ $rc -eq 1 ] && case "$out" in *"could not copy"*"pixel-dev-setup.sh"*) true;; *) false;; esac \
+   && [ "$(find "$h17f/.shortcuts" -type f 2>/dev/null | wc -l)" -eq 0 ]; then
+  t_ok "copy failure fails closed, names both paths (no shortcuts)"
+else
+  t_fail "copy-failure path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17g/h. --open-store opener diagnostics (session 8, D2). Restricted PATH keeps
+#        the pkg stub + coreutils but hides termux-open-url/am (curl symlinked
+#        in, so the fixture does not depend on the host's curl location).
+ln -sf "$(command -v curl)" "$tmp/bin/curl"
+OPATH="$tmp/bin:/usr/bin:/bin"
+run_boot_op(){ # like run_boot, but with the opener-free PATH
+  local h; h="$(mktemp -d "${tmp}/boot home.XXXXXX")"
+  BOOT_DEST="$h/.local/share/pixel"; BOOT_SHORT="$h/.shortcuts"
+  out="$(cd "$tmp" && env HOME="$h" PREFIX="$h/prefix" PATH="$OPATH" "$@" 2>&1)"; rc=$?
+}
+
+# 17g. no opener available: warn names the manual path, run still completes.
+run_boot_op bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")" --open-store
+if [ $rc -eq 0 ] && case "$out" in *"no URL opener"*"com.termux.widget"*) true;; *) false;; esac; then
+  t_ok "--open-store without opener warns with manual path (exit 0)"
+else
+  t_fail "opener-fallback path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17h. opener present (stub): success prints from inside the opener branch and
+#      the no-opener warning does not appear.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/termux-open-url"
+chmod +x "$tmp/bin/termux-open-url"
+run_boot_op bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")" --open-store
+if [ $rc -eq 0 ] && case "$out" in *"Opened Termux:Widget on F-Droid"*) true;; *) false;; esac \
+   && case "$out" in *"no URL opener"*) false;; *) true;; esac; then
+  t_ok "--open-store with opener prints success from the opener branch"
+else
+  t_fail "opener-success path" "rc=$rc"$'\n'"$out"
 fi
 
 # --- 18. bootstrap anchor install-flow contract (README §1) ---------------------
@@ -1593,5 +1649,10 @@ fi
 
 # --- summary ---------------------------------------------------------------------
 echo
+if [ "${#FAILED_TESTS[@]}" -gt 0 ]; then
+  printf 'failed tests:\n'
+  printf '  - %s\n' "${FAILED_TESTS[@]}"
+  echo
+fi
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
