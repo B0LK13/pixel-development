@@ -49,7 +49,7 @@ Companion to `docs/RELEASE_SIGNING.md` (signing mechanics) and
   in release notes and in `docs/BOOTSTRAP_RELEASE_PROCESS.md` §4 once
   established.
 - Distribute the verification keyring (`gpg --export`) as a versioned release
-  artifact so `verify-release-bundle.sh --keyring` has a canonical input.
+  artifact so `scripts/verify-release-bundle.sh --keyring` has a canonical input.
 - The README must never embed a "trusted" fingerprint that was not
   established out-of-band.
 
@@ -76,7 +76,7 @@ Companion to `docs/RELEASE_SIGNING.md` (signing mechanics) and
 
 - If signing is impossible (key unavailable, signer unreachable), a release
   may ship **integrity-only**: clearly labelled, verified with
-  `verify-release-bundle.sh` without `--require-signature`, and announced as
+  `scripts/verify-release-bundle.sh` without `--require-signature`, and announced as
   unsigned.
 - Ship a signed follow-up as soon as the signing path is restored.
 - Integrity-only releases prove hashes, not authenticity — say so.

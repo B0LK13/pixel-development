@@ -1491,6 +1491,29 @@ else
   t_fail "verifier side-effect fixture" "§27 bundle missing"
 fi
 
+# --- 29. repository readiness (session 7) -----------------------------------------
+# 29a. README section 10's layout block must stay current: every directory the
+#      release story depends on is listed, so newcomers are not misled.
+lay="$(sed -n '/^## 10\. Repo layout/,/^## 11\./p' "$ROOT/README.md")"
+missing=""
+for d in scripts/ tests/ config/ docs/ reports/ evidence/ .github/; do
+  printf '%s' "$lay" | grep -qF "$d" || missing="$missing $d"
+done
+if [ -z "$missing" ]; then
+  t_ok "README §10 repo layout lists all release-relevant directories"
+else
+  t_fail "README §10 layout stale" "missing:$missing"
+fi
+
+# 29b. docs reference release scripts by their real path (scripts/…), never a
+#      bare name that only resolves by accident.
+bare="$(grep -rn '`verify-release-bundle\.sh\|`build-release-candidate\.sh\|`update-bootstrap-checksums\.sh\|`verify-bootstrap-signature\.sh\|`ci-local\.sh' "$ROOT/docs" "$ROOT/README.md" 2>/dev/null || true)"
+if [ -z "$bare" ]; then
+  t_ok "docs reference release scripts by their scripts/ path"
+else
+  t_fail "bare script reference in docs" "$bare"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"

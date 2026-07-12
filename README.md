@@ -205,12 +205,20 @@ before merging.
 
 ```
 pixel-development/
-├─ pixel-bootstrap.sh
-├─ pixel-dev-setup.sh
-├─ pixel-apps-setup.sh
-├─ pixel-autodev.sh
-├─ tests/run_tests.sh   ← verification gate (syntax, shellcheck, dry-run behaviour)
-├─ .pixel-lab.json      ← stack metadata the autodev runner reads for the test command
+├─ pixel-bootstrap.sh     ← verified install entry point (fetch → verify → run)
+├─ pixel-dev-setup.sh     ← devbox provisioning (pinned by checksum manifest)
+├─ pixel-apps-setup.sh    ← optional apps layer (pinned by checksum manifest)
+├─ pixel-autodev.sh       ← autonomous backlog runner
+├─ scripts/               ← release + verification tooling (build/verify/checksums/ci-local)
+├─ tests/run_tests.sh     ← verification gate (syntax, shellcheck, contracts, clean-clone)
+├─ config/bootstrap-checksums.txt  ← pinned SHA-256 manifest
+├─ docs/                  ← CLI contract, trust model, release + signing docs, audit
+├─ reports/               ← session reports (append-only)
+├─ evidence/              ← generated verification evidence (append-only, see evidence/README.md)
+├─ .github/workflows/     ← CI: suite + release-candidate-check (no push, no secrets)
+├─ VERSION                ← SemVer of the pinned kit
+├─ .pixel-lab.json        ← stack metadata the autodev runner reads for the test command
+├─ .gitattributes         ← LF line-ending policy
 ├─ KICKSTART.md
 ├─ README.md
 ├─ LICENSE
