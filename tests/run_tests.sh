@@ -112,6 +112,8 @@ APATH="$tmp/bin:$PATH"
 mk_ws(){
   local d="$1"; mkdir -p "$d"; git -C "$d" init -q 2>/dev/null
   git -C "$d" config user.name t; git -C "$d" config user.email t@t
+  # fixtures never sign: the host's global commit.gpgsign must not leak in
+  git -C "$d" config commit.gpgsign false
   printf '# test charter\n' > "$d/PIXEL_AGENT.md"
   printf '.autodev/\n' > "$d/.gitignore"
   git -C "$d" add -A && git -C "$d" commit -qm init >/dev/null
