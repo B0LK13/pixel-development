@@ -54,23 +54,29 @@ should not be used.)
    then `bash scripts/update-bootstrap-checksums.sh --check` must exit 0.
 3. **Run the full suite** — `bash tests/run_tests.sh` (includes harness §16
    lockstep, §18 README pin, §19 signature fixtures, §20 tool tests).
-4. **Review the diff** — `git diff <prev-tag>..HEAD -- pixel-*.sh config/`.
-5. **Create the release commit** — bump `VERSION`; add the pin-history row
+4. **Exercise the bundle flow** (release-candidate mechanics) — build with
+   the release commit's epoch: `SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+   bash scripts/build-release-candidate.sh --version=X.Y.Z`, then run both
+   verifier modes (unsigned → `verified-integrity-only`; signed →
+   `verified-signed`). Full procedure, signing, and policy:
+   `docs/RELEASE_SIGNING.md` §2–4.
+5. **Review the diff** — `git diff <prev-tag>..HEAD -- pixel-*.sh config/`.
+6. **Create the release commit** — bump `VERSION`; add the pin-history row
    below (version, commit, `sha256sum pixel-bootstrap.sh`, date, `current`);
    update the README §1 pin block to the new commit + digest (harness §18
    goes red if the README pin disagrees with the pinned object).
-6. **Create the tag** — `git tag -a vX.Y.Z` (annotated; sign it if the
+7. **Create the tag** — `git tag -a vX.Y.Z` (annotated; sign it if the
    maintainer signing identity exists: `git tag -s`).
-7. **Publish** (operator-owned, this loop never does it): push the branch +
+8. **Publish** (operator-owned, this loop never does it): push the branch +
    tag; create the GitHub release; attach `pixel-bootstrap.sh` and, when a
    signing identity exists, `pixel-bootstrap.sh.sig`
    (`gpg --detach-sign --armor`).
-8. **Verify the published digest** — from a *different* machine/network:
+9. **Verify the published digest** — from a *different* machine/network:
    fetch the release asset, `sha256sum` it, and compare with the pin-history
    row AND the value published out-of-band (release notes / project site).
-9. **Test a fresh installation** — run the README §1 verified flow verbatim
-   on a clean Termux install (or the closest available clean environment).
-10. **Retain the rollback reference** — flip the previous pin-history row to
+10. **Test a fresh installation** — run the README §1 verified flow verbatim
+    on a clean Termux install (or the closest available clean environment).
+11. **Retain the rollback reference** — flip the previous pin-history row to
     `deprecated` (never delete it).
 
 ## 4. Signing (tier 2 — once a maintainer key exists)
