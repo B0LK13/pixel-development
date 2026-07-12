@@ -1,0 +1,50 @@
+== session-8 ci timing final ==
+date: 2026-07-12T20:59:31+00:00
+commit: d11ae8f43c6039d6cadac4bdc15126439c3ea439 (auto/integrate-session-8)
+run integrity: none (HEAD and branch stable for the whole run)
+host note: devbox, thermal throttling known (see session-6/7 reports);
+numbers are this-host measurements, not CI measurements.
+
+-- per-gate wall times (scripts/ci-local.sh command set) --
+gate 1 git diff --check:       1s
+gate 2 checksum --check:       0s
+gate 3 bash -n (10 scripts):    1s
+gate 4 shellcheck -S warning:   3s
+gate 5 tests/run_tests.sh:      863s
+total wall: 868s
+
+-- suite hot spots (PIXEL_TEST_TIMINGS=1, per-test seconds, top 25) --
+TIMING  279s  clean-clone smoke: suite passes from a fresh clone
+TIMING   76s  verify: unsigned bundle → verified-integrity-only (authenticity NOT claimed)
+TIMING   48s  verify: unverified .asc noted, verdict stays integrity-only
+TIMING   39s  verify: SHA256SUMS disagreement → failed-checksum
+TIMING   33s  verify-signed: valid signature + matching keyring → verified-signed
+TIMING   25s  verify: manifest/metadata version mismatch → failed-metadata
+TIMING   25s  verify: altered metadata breaks manifest binding → failed-metadata
+TIMING   14s  rc build: exact 9-file bundle layout
+TIMING   13s  rc: symlink artifact rejected (exit 1)
+TIMING   12s  verify-signed: valid signature with --require-signature → verified-signed
+TIMING   12s  reproducibility: two SDE-pinned builds are byte-identical (content, modes, mtimes)
+TIMING   12s  rc: stale checksum manifest rejected atomically (exit 1, no bundle)
+TIMING   12s  rc: missing artifact rejected (exit 1)
+TIMING   10s  rc: dirty tree rejected (exit 1, no bundle, no temp leftovers)
+TIMING    9s  verify-signed: wrong public key → failed-signature
+TIMING    8s  verify: mode drift → failed-checksum
+TIMING    8s  verify-signed: altered signed manifest → failed-signature
+TIMING    7s  verify: altered artifact → failed-checksum
+TIMING    7s  verify-release-bundle.sh is side-effect free (bundle byte-identical after verify)
+TIMING    6s  verify: --require-signature without signature → failed-policy
+TIMING    6s  verify-signed: valid signature + altered artifact → failed-checksum
+TIMING    6s  rc: SOURCE_DATE_EPOCH pins created_at deterministically
+TIMING    6s  claude backend: 1s timeout kills stub, branch reverted, task stays open
+TIMING    6s  --max-tasks=08 canonicalised to 8 (octal-safe loop bound)
+TIMING    5s  verify-signed: signature over the wrong file → failed-signature
+
+-- timing distribution --
+tests >= 10s: 14
+tests 5-9s:   18
+tests 1-4s:   86
+tests 0s:     191
+
+suite summary: passed: 309   failed: 0   skipped: 0
+final verdict: GREEN

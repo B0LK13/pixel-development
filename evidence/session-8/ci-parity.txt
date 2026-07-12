@@ -1,3 +1,29 @@
+== session-8 ci parity (local mirror of .github/workflows/test.yml) ==
+date: 2026-07-12T20:59:32+00:00
+branch: auto/integrate-session-8
+commit: d11ae8f43c6039d6cadac4bdc15126439c3ea439
+command: bash scripts/ci-local.sh
+
+
+== [1/5] whitespace + conflict markers — git diff --check
+   ok git diff --check
+
+== [2/5] checksum manifest lockstep — update-bootstrap-checksums.sh --check
+  ok   manifest: pixel-apps-setup.sh
+  ok   manifest: pixel-bootstrap.sh
+  ok   manifest: pixel-dev-setup.sh
+  ok   embedded: pixel-dev-setup.sh
+  ok   embedded: pixel-apps-setup.sh
+checksum manifest is current (3 artifacts, embedded digests in lockstep)
+   ok checksum --check
+
+== [3/5] shell syntax — bash -n (every tracked shell script)
+   ok bash -n (10 scripts)
+
+== [4/5] shellcheck -S warning (every tracked shell script)
+   ok shellcheck
+
+== [5/5] full test suite — bash tests/run_tests.sh
 == pixel-development test suite ==
   ok    required file present: pixel-bootstrap.sh
   ok    required file present: pixel-dev-setup.sh
@@ -310,3 +336,7 @@
   ok    docs reference release scripts by their scripts/ path
 
 passed: 309   failed: 0   skipped: 0
+
+ci-local: ALL GATES PASSED
+
+ci-local exit: 0
