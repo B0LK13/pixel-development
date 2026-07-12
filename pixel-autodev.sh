@@ -347,16 +347,24 @@ EOF
 
   info "verifying…"
   if ( cd "$dir" && run_tests ); then
-    ( cd "$dir" && git add -A && git commit -q -m "feat(auto): $text" )
-    [ "$PUSH" = 1 ] && ( cd "$dir" && git push -u origin "auto/$slug" 2>/dev/null && info "pushed auto/$slug" || warn "push failed" )
-    mark_done "$raw"
-    ok "task complete → branch auto/$slug${cost:+  (\$$cost)}"
-    rec "- RESULT: DONE on auto/$slug"; return 0
+    if ( cd "$dir" && git add -A && git commit -q -m "feat(auto): $text" ); then
+      [ "$PUSH" = 1 ] && ( cd "$dir" && git push -u origin "auto/$slug" 2>/dev/null && info "pushed auto/$slug" || warn "push failed" )
+      mark_done "$raw"
+      ok "task complete → branch auto/$slug${cost:+  (\$$cost)}"
+      rec "- RESULT: DONE on auto/$slug"; return 0
+    fi
+    # commit failed (e.g. broken signing config): never claim done — the
+    # task stays open and the branch keeps the agent's work for review
+    warn "commit failed — task stays open; branch auto/$slug kept with the agent's work for manual review"
+    rec "- RESULT: COMMIT FAILED (branch kept)"; return 1
   else
     warn "tests failed — keeping branch auto/$slug for review, task stays open"
-    ( cd "$dir" && git add -A && git commit -q -m "wip(auto): $text (tests failing)" )
-    ( cd "$dir" && git switch "$base" 2>/dev/null )
-    rec "- RESULT: TESTS FAILED (branch kept)"; return 1
+    if ( cd "$dir" && git add -A && git commit -q -m "wip(auto): $text (tests failing)" ); then
+      ( cd "$dir" && git switch "$base" 2>/dev/null )
+      rec "- RESULT: TESTS FAILED (branch kept)"; return 1
+    fi
+    warn "wip commit also failed — branch auto/$slug left checked out with uncommitted work"
+    rec "- RESULT: TESTS FAILED + COMMIT FAILED (branch kept)"; return 1
   fi
 }
 
