@@ -69,7 +69,7 @@ gpg --local-user "<approved-signing-key>" \
 Integrity only (no trust claim beyond the hashes):
 
 ```bash
-bash scripts/verify-release-bundle.sh --bundle ./dist/pixel-development-1.0.0
+bash scripts/verify-release-bundle.sh --bundle=./dist/pixel-development-1.0.0
 # verdict: verified-integrity-only
 ```
 
@@ -77,9 +77,9 @@ Signed verification (authenticity, once the operator keyring exists):
 
 ```bash
 bash scripts/verify-release-bundle.sh \
-  --bundle ./dist/pixel-development-1.0.0 \
-  --signature ./dist/pixel-development-1.0.0/SIGNING-MANIFEST.json.asc \
-  --keyring ./pixel-release-signing.gpg \
+  --bundle=./dist/pixel-development-1.0.0 \
+  --signature=./dist/pixel-development-1.0.0/SIGNING-MANIFEST.json.asc \
+  --keyring=./pixel-release-signing.gpg \
   --require-signature
 # verdict: verified-signed
 ```
