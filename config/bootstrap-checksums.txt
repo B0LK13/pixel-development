@@ -17,6 +17,6 @@
 #  steps 1+2 deterministically; `--check` is the gate.)
 #
 # Format: <sha256>  <script name>  (sha256sum format, sorted by name)
-844d81db780f9ffec8f7d49388f9261429d34d826737ea2abbe533b7892eb619  pixel-apps-setup.sh
-3542e200217f3ec57d0b5e83df5e413d24929d45048f0f89f1022c71882d9aa5  pixel-bootstrap.sh
-bc9b49fa953ae5511fd576180f83e00f350788b6f5d3cab295a649ede14a292f  pixel-dev-setup.sh
+8ada19e922d0272b66606bdaa04bc15332e42c694fa37b4cfa125e54b97a5495  pixel-apps-setup.sh
+0b135f8d0bf5fa634b1e46747f4c331333bbfc56a1965cfedbafd6bc1630e884  pixel-bootstrap.sh
+444e59fb0e125f70c4c7b4ad03f7e6e8dd52b0af0ad7d71a41357abee310abc6  pixel-dev-setup.sh

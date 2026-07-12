@@ -49,7 +49,7 @@ for a in "$@"; do case "$a" in
   --push)        PUSH=1 ;;
   --dry-run)     DRY=1 ;;
   --yes|-y)      : ;;  # accepted for CLI parity with pixel-dev-setup.sh (autodev never prompts)
-  --help|-h) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  --help|-h) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "Unknown flag: $a (try --help)"; exit 2 ;;
 esac; done
 [ -z "$BACKLOG" ] && BACKLOG="$WORKSPACE/BACKLOG.md"

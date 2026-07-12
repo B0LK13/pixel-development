@@ -32,7 +32,7 @@ for arg in "$@"; do
     --no-font)            NO_FONT=1 ;;
     --yes|-y)             : ;;  # accepted for CLI parity with pixel-dev-setup.sh (no prompts here)
     --ssh-port=*)         SSH_PORT="${arg#*=}" ;;
-    --help|-h) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown flag: $arg (try --help)"; exit 2 ;;
   esac
 done

@@ -70,6 +70,13 @@ fi
 for s in "${SCRIPTS[@]}"; do
   out="$(bash "$s" --help 2>&1)"; rc=$?
   if [ $rc -eq 0 ] && [ -n "$out" ]; then t_ok "--help exits 0 with usage: $s"; else t_fail "--help: $s" "rc=$rc"; fi
+  # banner-only output: the sed range must end at the banner border, never leak
+  # script source (every banner line ends with '#' after the prefix strip)
+  if [ -n "$out" ] && [ -z "$(printf '%s\n' "$out" | grep -v '#$')" ]; then
+    t_ok "--help prints banner only, no source leak: $s"
+  else
+    t_fail "--help leaks script source: $s" "$(printf '%s\n' "$out" | grep -v '#$' | head -3)"
+  fi
   bash "$s" --definitely-not-a-flag >/dev/null 2>&1; rc=$?
   if [ $rc -eq 2 ]; then t_ok "unknown flag exits 2: $s"; else t_fail "unknown flag: $s" "rc=$rc (want 2)"; fi
 done

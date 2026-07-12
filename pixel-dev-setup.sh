@@ -31,7 +31,7 @@ for arg in "$@"; do
     --no-ai)   DO_AI=0 ;;
     --yes|-y)  ASSUME_YES=1 ;;
     --help|-h)
-      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *) echo "Unknown flag: $arg (try --help)"; exit 2 ;;
   esac

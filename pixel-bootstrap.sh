@@ -62,8 +62,8 @@ expected_sha256(){ # $1 script name → prints pinned sha256; rc 1 if no entry
     return
   fi
   case "$1" in
-    pixel-dev-setup.sh)  printf '%s\n' 'bc9b49fa953ae5511fd576180f83e00f350788b6f5d3cab295a649ede14a292f' ;;
-    pixel-apps-setup.sh) printf '%s\n' '844d81db780f9ffec8f7d49388f9261429d34d826737ea2abbe533b7892eb619' ;;
+    pixel-dev-setup.sh)  printf '%s\n' '444e59fb0e125f70c4c7b4ad03f7e6e8dd52b0af0ad7d71a41357abee310abc6' ;;
+    pixel-apps-setup.sh) printf '%s\n' '8ada19e922d0272b66606bdaa04bc15332e42c694fa37b4cfa125e54b97a5495' ;;
     *) return 1 ;;
   esac
 }
