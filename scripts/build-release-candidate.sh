@@ -42,10 +42,7 @@ die(){ printf 'build-release-candidate: %s\n' "$*" >&2; exit 1; }
 
 # --- usage validation first (repo CLI contract: before any side effect) ------
 [ -n "$VERSION" ] || { echo "usage: bash scripts/build-release-candidate.sh --version=X.Y.Z [--check] [--output-dir=DIR] [--keep-partial]" >&2; exit 2; }
-case "$VERSION" in
-  *[!0-9.]*) die2=1 ;; *) die2=0 ;;
-esac
-if [ "${die2:-0}" = 1 ] || ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "build-release-candidate: malformed version: $VERSION (want strict SemVer X.Y.Z, e.g. 1.0.0)" >&2
   exit 2
 fi
