@@ -47,14 +47,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build fixture release candidate
-        run: SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh --version=0.0.0 --output-dir "$RUNNER_TEMP/rc"
+        run: SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh --version=0.0.0 --output-dir="$RUNNER_TEMP/rc"
       - name: Verify unsigned bundle (integrity-only)
         run: |
-          bash scripts/verify-release-bundle.sh --bundle "$RUNNER_TEMP/rc/pixel-development-0.0.0" | tee "$RUNNER_TEMP/unsigned.txt"
+          bash scripts/verify-release-bundle.sh --bundle="$RUNNER_TEMP/rc/pixel-development-0.0.0" | tee "$RUNNER_TEMP/unsigned.txt"
           grep -q "verdict: verified-integrity-only" "$RUNNER_TEMP/unsigned.txt"
       - name: Reproducibility check (second build, same epoch)
         run: |
-          SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh --version=0.0.0 --output-dir "$RUNNER_TEMP/rc2"
+          SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh --version=0.0.0 --output-dir="$RUNNER_TEMP/rc2"
           diff -r "$RUNNER_TEMP/rc/pixel-development-0.0.0" "$RUNNER_TEMP/rc2/pixel-development-0.0.0"
       - name: Sign with a throwaway CI fixture key, verify signed
         run: |
@@ -67,7 +67,7 @@ jobs:
           B="$RUNNER_TEMP/rc/pixel-development-0.0.0"
           gpg --batch --yes --local-user ci@example.invalid --detach-sign --armor \
             --output "$B/SIGNING-MANIFEST.json.asc" "$B/SIGNING-MANIFEST.json"
-          bash scripts/verify-release-bundle.sh --bundle "$B" \
-            --signature "$B/SIGNING-MANIFEST.json.asc" \
-            --keyring "$RUNNER_TEMP/ci-fixture.pub" --require-signature | tee "$RUNNER_TEMP/signed.txt"
+          bash scripts/verify-release-bundle.sh --bundle="$B" \
+            --signature="$B/SIGNING-MANIFEST.json.asc" \
+            --keyring="$RUNNER_TEMP/ci-fixture.pub" --require-signature | tee "$RUNNER_TEMP/signed.txt"
           grep -q "verdict: verified-signed" "$RUNNER_TEMP/signed.txt"

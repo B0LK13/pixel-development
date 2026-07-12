@@ -948,6 +948,14 @@ for mech in 'SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh' 'bash 
     t_ok "workflow release job exercises: $mech"
   else t_fail "workflow release job" "missing: $mech"; fi
 done
+# the release tools are equals-only (harness §7/§12: space-form exits 2), so a
+# space-form invocation in the workflow would fail on the first remote run —
+# pin equals-form for every value-taking release flag
+if grep -qE -- '--(version|output-dir|bundle|signature|keyring) ' "$WF"; then
+  t_fail "workflow release job" "space-form release flag (equals-only tools)"
+else
+  t_ok "workflow release job uses equals-form flags (release tools are equals-only)"
+fi
 if grep -qF 'scripts/build-release-candidate.sh' "$ROOT/tests/run_tests.sh" \
    && grep -qF 'scripts/verify-release-bundle.sh' "$ROOT/tests/run_tests.sh"; then
   t_ok "CI parity: release mechanisms also covered by the hermetic suite (ci-local gate 5)"
