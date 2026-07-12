@@ -1,0 +1,47 @@
+== session-8 ci timing baseline ==
+date: 2026-07-12T18:34:42+00:00
+commit: e4304d5122741cfac614c7d3d00160c91e715ddf (auto/integrate-session-8)
+run integrity: none (HEAD and branch stable for the whole run)
+host note: devbox, thermal throttling known (see session-6/7 reports);
+numbers are this-host measurements, not CI measurements.
+
+-- per-gate wall times (scripts/ci-local.sh command set) --
+gate 1 git diff --check:       0s
+gate 2 checksum --check:       0s
+gate 3 bash -n (10 scripts):    1s
+gate 4 shellcheck -S warning:   3s
+gate 5 tests/run_tests.sh:      578s
+total wall: 582s
+
+-- suite hot spots (PIXEL_TEST_TIMINGS=1, per-test seconds, top 25) --
+TIMING  314s  clean-clone smoke: suite passes from a fresh clone
+TIMING   10s  reproducibility: two SDE-pinned builds are byte-identical (content, modes, mtimes)
+TIMING    9s  verify: unsigned bundle → verified-integrity-only (authenticity NOT claimed)
+TIMING    8s  codex backend: 1s timeout kills stub, branch reverted, task stays open
+TIMING    7s  success path: stub agent committed on green, backlog flipped
+TIMING    7s  reproducibility: different SDE changes only metadata+manifest (payload stable)
+TIMING    7s  rc build: exact 9-file bundle layout
+TIMING    7s  claude backend: 1s timeout kills stub, branch reverted, task stays open
+TIMING    7s  backlog task text is inert (prompt built without shell expansion of data)
+TIMING    7s  --max-tasks=08 canonicalised to 8 (octal-safe loop bound)
+TIMING    6s  rc: stale checksum manifest rejected atomically (exit 1, no bundle)
+TIMING    6s  rc: missing artifact rejected (exit 1)
+TIMING    5s  rc: symlink artifact rejected (exit 1)
+TIMING    5s  rc: dirty tree rejected (exit 1, no bundle, no temp leftovers)
+TIMING    5s  autodev --dry-run parses task and slugifies branch
+TIMING    4s  verify: unverified .asc noted, verdict stays integrity-only
+TIMING    4s  verify: mode drift → failed-checksum
+TIMING    4s  verify-signed: valid signature + matching keyring → verified-signed
+TIMING    4s  verify-signed: corrupted signature fails closed
+TIMING    4s  verify-signed: bundle .asc auto-detected with --keyring → verified-signed
+TIMING    4s  verify-release-bundle.sh is side-effect free (bundle byte-identical after verify)
+TIMING    4s  rc: SOURCE_DATE_EPOCH pins created_at deterministically
+TIMING    4s  policy line shows timeout=1200s
+TIMING    4s  non-dry-run resolves the agent in preflight (dispatch stays stub-pinned)
+TIMING    4s  checksum tool: --check passes from a clean clone
+
+-- timing distribution --
+tests >= 10s: 2
+tests 5-9s:   13
+tests 1-4s:   90
+tests 0s:     183
