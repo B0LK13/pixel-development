@@ -50,7 +50,8 @@ have(){ command -v "$1" >/dev/null 2>&1; }
 # config/bootstrap-checksums.txt (sync enforced by harness §16; update
 # procedure in docs/CLI_CONTRACT.md §8).
 # ---------------------------------------------------------------------------
-DLTMP="$(mktemp -d "${TMPDIR:-/tmp}/pixel-dl.XXXXXX")"
+DLTMP="$(mktemp -d "${TMPDIR:-/tmp}/pixel-dl.XXXXXX")" \
+  || die "cannot create download temp dir (check TMPDIR=${TMPDIR:-/tmp})"
 trap 'rm -rf "$DLTMP"' EXIT
 trap 'exit 130' INT    # route signals through the EXIT trap → temp cleanup
 trap 'exit 143' TERM

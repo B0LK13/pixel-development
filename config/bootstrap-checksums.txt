@@ -18,5 +18,5 @@
 #
 # Format: <sha256>  <script name>  (sha256sum format, sorted by name)
 8ada19e922d0272b66606bdaa04bc15332e42c694fa37b4cfa125e54b97a5495  pixel-apps-setup.sh
-0b135f8d0bf5fa634b1e46747f4c331333bbfc56a1965cfedbafd6bc1630e884  pixel-bootstrap.sh
+807a7b800d0e979b85d0b97afc12a6c2f42caba41eebc2b6b32d294ade1b2501  pixel-bootstrap.sh
 444e59fb0e125f70c4c7b4ad03f7e6e8dd52b0af0ad7d71a41357abee310abc6  pixel-dev-setup.sh

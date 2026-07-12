@@ -256,6 +256,28 @@ timeout_case(){ # $1 ws-dir  $2 task  $3 agent(claude|codex)
 timeout_case "$tmp/ws8" "Probe claude timeout path" claude
 timeout_case "$tmp/ws9" "Probe codex timeout path" codex
 
+# 6h. commit failure is never reported as done: when git commit fails (here
+#     forced via commit.gpgsign=true with a nonexistent signing key — the
+#     way a host with broken signing config behaves), the backlog must NOT
+#     flip, no feat(auto) commit may exist, and the run must say so. The
+#     "commit only on green" contract is void if a failed commit claims DONE.
+ws7c="$tmp/ws7c"; mk_ws "$ws7c"
+printf -- '- [ ] Probe commit-failure honesty\n' > "$ws7c/BACKLOG.md"
+git -C "$ws7c" add -A && git -C "$ws7c" commit -qm task >/dev/null
+# fixtures default to commit.gpgsign=false (session 7 hermeticity); override
+# to simulate the broken-host case (verified: rc=128 "No secret key", fast)
+git -C "$ws7c" config commit.gpgsign true
+git -C "$ws7c" config user.signingkey 0000000000000000
+out="$(env PATH="$APATH" CLAUDE_BIN="$tmp/bin/fake-claude" bash "$ROOT/pixel-autodev.sh" --workspace="$ws7c" --timeout=30 2>&1)"; rc=$?
+last="$(git -C "$ws7c" log --format=%s -1 2>/dev/null)"
+if [ $rc -eq 0 ] && [ "$last" = "task" ] \
+   && grep -q '^- \[ \] Probe commit-failure honesty' "$ws7c/BACKLOG.md" \
+   && case "$out" in *"commit failed"*) true;; *) false;; esac; then
+  t_ok "commit failure: task stays open, no DONE claim, no commit created"
+else
+  t_fail "autodev commit-failure honesty" "rc=$rc last=$last"$'\n'"$out"
+fi
+
 # --- 7. CLI contract extras (document current behaviour) -------------------------
 # space-form value flags are NOT supported (equals syntax only) → usage error
 bash "$ROOT/pixel-apps-setup.sh" --ssh-port 9022 >/dev/null 2>&1; rc=$?
