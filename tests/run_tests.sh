@@ -7,7 +7,11 @@
 #  this harness) · --help/flag contract · .pixel-lab.json validity ·          #
 #  pixel-autodev.sh behaviour (dry-run, seeding, --timeout contract,          #
 #  end-to-end success/timeout paths via stub agents) · CLI contract extras ·  #
-#  clean-clone smoke. Hermetic: no network, no paid agents, no repo writes.   #
+#  clean-clone smoke · ssh-port / numeric / --agent flag contracts ·          #
+#  checksum manifest lockstep · release-candidate builder · bundle verifier   #
+#  (unsigned + signed fixtures + failure injection) · reproducibility ·       #
+#  CI workflow parity · release docs contracts · repository readiness.        #
+#  Hermetic: no network, no paid agents, no repo writes.                      #
 #                                                                             #
 #  Usage: bash tests/run_tests.sh        (exit 0 = all green)                 #
 #  Set PIXEL_TESTS_NO_CLONE=1 to skip the nested clean-clone smoke test.      #
@@ -36,7 +40,11 @@ SCRIPTS=(pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev
 # process substitution — /dev/fd is absent on some supported environments.
 lint_files="$(git ls-files '*.sh' 2>/dev/null)" || lint_files=
 if [ -z "$lint_files" ]; then
-  lint_files="$(printf '%s\n' pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh tests/run_tests.sh)"
+  lint_files="$(printf '%s\n' \
+    pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh \
+    tests/run_tests.sh \
+    scripts/verify-bootstrap-signature.sh scripts/update-bootstrap-checksums.sh \
+    scripts/ci-local.sh scripts/build-release-candidate.sh scripts/verify-release-bundle.sh)"
 fi
 
 echo "== pixel-development test suite =="
@@ -72,6 +80,21 @@ for s in "${SCRIPTS[@]}"; do
   if [ $rc -eq 0 ] && [ -n "$out" ]; then t_ok "--help exits 0 with usage: $s"; else t_fail "--help: $s" "rc=$rc"; fi
   # banner-only output: the sed range must end at the banner border, never leak
   # script source (every banner line ends with '#' after the prefix strip)
+  if [ -n "$out" ] && [ -z "$(printf '%s\n' "$out" | grep -v '#$')" ]; then
+    t_ok "--help prints banner only, no source leak: $s"
+  else
+    t_fail "--help leaks script source: $s" "$(printf '%s\n' "$out" | grep -v '#$' | head -3)"
+  fi
+  bash "$s" --definitely-not-a-flag >/dev/null 2>&1; rc=$?
+  if [ $rc -eq 2 ]; then t_ok "unknown flag exits 2: $s"; else t_fail "unknown flag: $s" "rc=$rc (want 2)"; fi
+done
+# the release tools get the same contract (README §8: every script supports
+# --help; the release banners' interior lines all end with '#')
+for s in scripts/build-release-candidate.sh scripts/update-bootstrap-checksums.sh \
+         scripts/verify-bootstrap-signature.sh scripts/verify-release-bundle.sh \
+         scripts/ci-local.sh; do
+  out="$(bash "$s" --help 2>&1)"; rc=$?
+  if [ $rc -eq 0 ] && [ -n "$out" ]; then t_ok "--help exits 0 with usage: $s"; else t_fail "--help: $s" "rc=$rc"; fi
   if [ -n "$out" ] && [ -z "$(printf '%s\n' "$out" | grep -v '#$')" ]; then
     t_ok "--help prints banner only, no source leak: $s"
   else
@@ -248,6 +271,28 @@ timeout_case(){ # $1 ws-dir  $2 task  $3 agent(claude|codex)
 timeout_case "$tmp/ws8" "Probe claude timeout path" claude
 timeout_case "$tmp/ws9" "Probe codex timeout path" codex
 
+# 6h. commit failure is never reported as done: when git commit fails (here
+#     forced via commit.gpgsign=true with a nonexistent signing key — the
+#     way a host with broken signing config behaves), the backlog must NOT
+#     flip, no feat(auto) commit may exist, and the run must say so. The
+#     "commit only on green" contract is void if a failed commit claims DONE.
+ws7c="$tmp/ws7c"; mk_ws "$ws7c"
+printf -- '- [ ] Probe commit-failure honesty\n' > "$ws7c/BACKLOG.md"
+git -C "$ws7c" add -A && git -C "$ws7c" commit -qm task >/dev/null
+# fixtures default to commit.gpgsign=false (session 7 hermeticity); override
+# to simulate the broken-host case (verified: rc=128 "No secret key", fast)
+git -C "$ws7c" config commit.gpgsign true
+git -C "$ws7c" config user.signingkey 0000000000000000
+out="$(env PATH="$APATH" CLAUDE_BIN="$tmp/bin/fake-claude" bash "$ROOT/pixel-autodev.sh" --workspace="$ws7c" --timeout=30 2>&1)"; rc=$?
+last="$(git -C "$ws7c" log --format=%s -1 2>/dev/null)"
+if [ $rc -eq 0 ] && [ "$last" = "task" ] \
+   && grep -q '^- \[ \] Probe commit-failure honesty' "$ws7c/BACKLOG.md" \
+   && case "$out" in *"commit failed"*) true;; *) false;; esac; then
+  t_ok "commit failure: task stays open, no DONE claim, no commit created"
+else
+  t_fail "autodev commit-failure honesty" "rc=$rc last=$last"$'\n'"$out"
+fi
+
 # --- 7. CLI contract extras (document current behaviour) -------------------------
 # space-form value flags are NOT supported (equals syntax only) → usage error
 bash "$ROOT/pixel-apps-setup.sh" --ssh-port 9022 >/dev/null 2>&1; rc=$?
@@ -260,6 +305,19 @@ if [ $rc -eq 2 ]; then t_ok "bootstrap bare '--repo-base' rejected with exit 2";
 # '--' is not special-cased today → unknown flag (documented, not changed)
 bash "$ROOT/pixel-bootstrap.sh" -- >/dev/null 2>&1; rc=$?
 if [ $rc -eq 2 ]; then t_ok "bootstrap '--' currently rejected as unknown flag"; else t_fail "'--' handling" "rc=$rc (want 2)"; fi
+
+# --- 8. clean-clone smoke (fast, hermetic, non-recursive) -------------------------
+if [ "${PIXEL_TESTS_NO_CLONE:-0}" = 1 ]; then
+  t_skip "clean-clone smoke (nested run)"
+else
+  clone="$tmp/clean clone"
+  if git clone -q --local "$ROOT" "$clone" 2>/dev/null \
+     && ( cd "$clone" && PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh >/dev/null 2>&1 ); then
+    t_ok "clean-clone smoke: suite passes from a fresh clone"
+  else
+    t_fail "clean-clone smoke: suite must pass from a fresh clone"
+  fi
+fi
 
 # --- 9. --ssh-port contract (pixel-apps-setup.sh) --------------------------------
 # Throwaway HOME (with a space): any side effect (the log file) becomes
@@ -308,19 +366,6 @@ out="$(run_apps --ssh-port=abc --ssh-port=2000 2>&1)"; rc=$?
 if [ $rc -eq 1 ]; then t_ok "duplicate --ssh-port: later valid overrides earlier invalid"; else t_fail "duplicate ssh-port valid-last" "rc=$rc"; fi
 err="$(run_apps --ssh-port=2000 --ssh-port=abc 2>&1 >/dev/null)"; rc=$?
 if [ $rc -eq 2 ]; then t_ok "duplicate --ssh-port: later invalid rejected (last-wins validated)"; else t_fail "duplicate ssh-port invalid-last" "rc=$rc"; fi
-
-# --- 8. clean-clone smoke (fast, hermetic, non-recursive) -------------------------
-if [ "${PIXEL_TESTS_NO_CLONE:-0}" = 1 ]; then
-  t_skip "clean-clone smoke (nested run)"
-else
-  clone="$tmp/clean clone"
-  if git clone -q --local "$ROOT" "$clone" 2>/dev/null \
-     && ( cd "$clone" && PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh >/dev/null 2>&1 ); then
-    t_ok "clean-clone smoke: suite passes from a fresh clone"
-  else
-    t_fail "clean-clone smoke: suite must pass from a fresh clone"
-  fi
-fi
 
 # --- 10. numeric flag contract (pixel-autodev.sh) --------------------------------
 # 10a-c. malformed values are usage errors (exit 2, flag named on stderr) BEFORE
@@ -918,6 +963,14 @@ for mech in 'SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh' 'bash 
     t_ok "workflow release job exercises: $mech"
   else t_fail "workflow release job" "missing: $mech"; fi
 done
+# the release tools are equals-only (harness §7/§12: space-form exits 2), so a
+# space-form invocation in the workflow would fail on the first remote run —
+# pin equals-form for every value-taking release flag
+if grep -qE -- '--(version|output-dir|bundle|signature|keyring) ' "$WF"; then
+  t_fail "workflow release job" "space-form release flag (equals-only tools)"
+else
+  t_ok "workflow release job uses equals-form flags (release tools are equals-only)"
+fi
 if grep -qF 'scripts/build-release-candidate.sh' "$ROOT/tests/run_tests.sh" \
    && grep -qF 'scripts/verify-release-bundle.sh' "$ROOT/tests/run_tests.sh"; then
   t_ok "CI parity: release mechanisms also covered by the hermetic suite (ci-local gate 5)"

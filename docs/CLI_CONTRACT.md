@@ -108,24 +108,24 @@ Autonomous backlog runner (runs inside the proot Ubuntu devbox).
 
 | flag | takes value | default | validation | invalid-value behavior | banner wording | impl | coverage |
 |------|------------|---------|------------|----------------------|----------------|------|----------|
-| `--workspace=DIR` | yes | `$PIXEL_WORKSPACE` env, else `$HOME/pixel-lab` | existence checked in preflight (`die`, exit 1) | run aborts before touching tasks | `[--workspace=DIR]` | `:21`, `:38` | dry-run tests |
-| `--backlog=FILE` | yes | `$WORKSPACE/BACKLOG.md` | seeded if absent | starter backlog written | `[--backlog=FILE]` | `:39` | seeding test |
-| `--max-tasks=N` | yes | `3` | **integer 1–999999**, canonicalised (it drives the shell loop bound, so no leading zeros/overflow reach the arithmetic) | exit **2** `pixel-autodev: --max-tasks must be an integer between 1 and 999999 (got '<v>')` | `[--max-tasks=N]` | `:23`, `:40`, `:68-70` | full matrix + octal edge + duplicates (§10) |
-| `--max-turns=N` | yes | `30` | **positive integer** (leading zeros tolerated, passed through) | exit **2** `… --max-turns must be a positive integer (got '<v>')` | `[--max-turns=N]` | `:24`, `:41`, `:65` | full matrix + duplicates (§10) |
-| `--budget=USD` | yes | `2.00` | **positive decimal**: digits, at most one dot with a digit on each side, non-zero value (rejects `0`, `0.00`, `.5`, `2.`, `1.2.3`) | exit **2** `… --budget must be a positive number (e.g. 2.00) (got '<v>')` | `[--budget=USD]` | `:25`, `:42`, `:74-77` | full matrix (§10) |
-| `--timeout=SECONDS` | yes | `1200` | **positive integer** (rejects empty, non-numeric, negative, zero; arithmetic-free — no octal/overflow edge) | exit **2** with `pixel-autodev: --timeout must be a positive integer (got '<v>')`, before any preflight | `[--timeout=SECONDS]` | `:26`, `:43`, `:64` | full matrix (§6, §10) |
-| `--model=sonnet\|opus` | yes | `sonnet` | none (any string passed to `claude --model`) | agent CLI errors at dispatch | `[--model=...]` | `:27`, `:44` | — |
-| `--agent=claude\|codex` | yes | `claude` | **enum: `claude`, `codex`** (case-sensitive); binary resolution runs in preflight on real runs only | bad value → exit **2** `… --agent must be one of: claude, codex (got '<v>')`; missing/Termux binary → `die` exit 1 | `[--agent=...]` | `:28`, `:45`, `:80-83` | enum matrix + duplicates (§11), preflight (§13) |
-| `--yolo` | no | `dontAsk` | — | n/a | `[--yolo]` | `:46` | — |
-| `--push` | no | `0` (never pushes) | — | n/a | `[--push]` | `:47` | — |
-| `--dry-run` | no | `0` | — | n/a | `[--dry-run]` | `:48` | dry-run tests |
-| `--yes` / `-y` | no | accepted no-op | — | n/a | `[--yes]` | `:49` | help/unknown-flag contract |
-| `--help` / `-h` | no | — | — | exit 0 | — | `:50` | `--help` contract |
-| unknown | — | — | — | exit 2 | — | `:51` | unknown-flag + bare-flag tests |
+| `--workspace=DIR` | yes | `$PIXEL_WORKSPACE` env, else `$HOME/pixel-lab` | existence checked in preflight (`die`, exit 1) | run aborts before touching tasks | `[--workspace=DIR]` | `:21`, `:40` | dry-run tests |
+| `--backlog=FILE` | yes | `$WORKSPACE/BACKLOG.md` | seeded if absent | starter backlog written | `[--backlog=FILE]` | `:41` | seeding test |
+| `--max-tasks=N` | yes | `3` | **integer 1–999999**, canonicalised (it drives the shell loop bound, so no leading zeros/overflow reach the arithmetic) | exit **2** `pixel-autodev: --max-tasks must be an integer between 1 and 999999 (got '<v>')` | `[--max-tasks=N]` | `:23`, `:42`, `:70-72` | full matrix + octal edge + duplicates (§10) |
+| `--max-turns=N` | yes | `30` | **positive integer** (leading zeros tolerated, passed through) | exit **2** `… --max-turns must be a positive integer (got '<v>')` | `[--max-turns=N]` | `:24`, `:43`, `:67` | full matrix + duplicates (§10) |
+| `--budget=USD` | yes | `2.00` | **positive decimal**: digits, at most one dot with a digit on each side, non-zero value (rejects `0`, `0.00`, `.5`, `2.`, `1.2.3`) | exit **2** `… --budget must be a positive number (e.g. 2.00) (got '<v>')` | `[--budget=USD]` | `:25`, `:44`, `:76-79` | full matrix (§10) |
+| `--timeout=SECONDS` | yes | `1200` | **positive integer** (rejects empty, non-numeric, negative, zero; arithmetic-free — no octal/overflow edge) | exit **2** with `pixel-autodev: --timeout must be a positive integer (got '<v>')`, before any preflight | `[--timeout=SECONDS]` | `:26`, `:45`, `:66` | full matrix (§6, §10) |
+| `--model=sonnet\|opus` | yes | `sonnet` | none (any string passed to `claude --model`) | agent CLI errors at dispatch | `[--model=...]` | `:27`, `:46` | — |
+| `--agent=claude\|codex` | yes | `claude` | **enum: `claude`, `codex`** (case-sensitive); binary resolution runs in preflight on real runs only | bad value → exit **2** `… --agent must be one of: claude, codex (got '<v>')`; missing/Termux binary → `die` exit 1 | `[--agent=...]` | `:28`, `:47`, `:82-85` | enum matrix + duplicates (§11), preflight (§13) |
+| `--yolo` | no | `dontAsk` | — | n/a | `[--yolo]` | `:48` | — |
+| `--push` | no | `0` (never pushes) | — | n/a | `[--push]` | `:49` | — |
+| `--dry-run` | no | `0` | — | n/a | `[--dry-run]` | `:50` | dry-run tests |
+| `--yes` / `-y` | no | accepted no-op | — | n/a | `[--yes]` | `:51` | help/unknown-flag contract |
+| `--help` / `-h` | no | — | — | exit 0 | — | `:52` | `--help` contract |
+| unknown | — | — | — | exit 2 | — | `:53` | unknown-flag + bare-flag tests |
 
 Environment override seams (not flags): `PIXEL_WORKSPACE`, `PIXEL_REPO_BASE`,
 `CLAUDE_BIN`, `CODEX_BIN`, `TIMEOUT_BIN`, `GIT_BIN`. The four `*_BIN` vars
-feed one resolver (`resolve_required_tool`, `pixel-autodev.sh:99-117`): unset
+feed one resolver (`resolve_required_tool`, `pixel-autodev.sh:108-120`): unset
 → default PATH resolution (production behavior); set but empty → treated as
 missing (hermetic absence simulation); path with `/` → must be an executable
 file; bare name → PATH lookup. `CLAUDE_BIN`/`CODEX_BIN` default to the real
@@ -133,7 +133,7 @@ binary names and change nothing in normal use; the seam only affects
 detection/reporting — validation runs earlier and is never bypassed, and
 every resolved path is used quoted (harness §15).
 
-All value validation runs right after parsing (`pixel-autodev.sh:55-83`),
+All value validation runs right after parsing (`pixel-autodev.sh:56-85`),
 before preflight: a usage error creates no `.autodev/` state and seeds
 nothing (harness §10g). `--dry-run` additionally skips agent-binary
 resolution in preflight, so a plan view needs no paid-agent executable and
@@ -205,7 +205,7 @@ Runtime dependency inventory (from the scripts themselves, not assumed):
 
 | tool | class | used by | absent behavior |
 |------|-------|---------|-----------------|
-| bash | required | all scripts (shebang) | n/a |
+| bash | required | all scripts (shebang); **≥4 for the release tooling** (`declare -A` in `scripts/update-bootstrap-checksums.sh` and `scripts/verify-release-bundle.sh`) | n/a |
 | Termux runtime (`$PREFIX` + `pkg`) | required | bootstrap / dev-setup / apps-setup preflights | `die` exit 1, "Run inside Termux…" |
 | git | required | autodev | `die` exit 1, "git not installed in devbox" |
 | `timeout` (GNU coreutils) | required | autodev agent dispatch | `die` exit 1 at preflight with a clear message |

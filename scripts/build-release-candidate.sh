@@ -32,7 +32,7 @@ for a in "$@"; do
     --check)         CHECK=1 ;;
     --output-dir=*)  OUT_PARENT="${a#*=}" ;;
     --keep-partial)  KEEP_PARTIAL=1 ;;
-    --help|-h) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) echo "build-release-candidate: unknown flag: $a (try --help)" >&2; exit 2 ;;
     *)   echo "build-release-candidate: unexpected argument: $a (try --help)" >&2; exit 2 ;;
   esac
@@ -42,10 +42,7 @@ die(){ printf 'build-release-candidate: %s\n' "$*" >&2; exit 1; }
 
 # --- usage validation first (repo CLI contract: before any side effect) ------
 [ -n "$VERSION" ] || { echo "usage: bash scripts/build-release-candidate.sh --version=X.Y.Z [--check] [--output-dir=DIR] [--keep-partial]" >&2; exit 2; }
-case "$VERSION" in
-  *[!0-9.]*) die2=1 ;; *) die2=0 ;;
-esac
-if [ "${die2:-0}" = 1 ] || ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "build-release-candidate: malformed version: $VERSION (want strict SemVer X.Y.Z, e.g. 1.0.0)" >&2
   exit 2
 fi

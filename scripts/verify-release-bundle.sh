@@ -30,7 +30,7 @@ for a in "$@"; do
     --signature=*)  SIG="${a#*=}" ;;
     --keyring=*)    KEYRING="${a#*=}" ;;
     --require-signature) REQ_SIG=1 ;;
-    --help|-h) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) echo "verify-release-bundle: unknown flag: $a (try --help)" >&2; exit 2 ;;
     *)   echo "verify-release-bundle: unexpected argument: $a (try --help)" >&2; exit 2 ;;
   esac
