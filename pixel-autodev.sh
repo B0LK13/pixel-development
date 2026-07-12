@@ -142,9 +142,9 @@ preflight(){
     esac
     ok "agent: $AGENT ($agent_path)"
   fi
-  resolve_required_tool timeout TIMEOUT_BIN >/dev/null || die "GNU timeout (coreutils) is required in the devbox"
+  resolve_required_tool timeout TIMEOUT_BIN >/dev/null || die "GNU timeout (coreutils) is required in the devbox — install with: apt-get install -y coreutils"
   have jq || { info "installing jq…"; apt-get install -y -qq jq >/dev/null 2>&1 || warn "jq missing (JSON parse limited)"; }
-  resolve_required_tool git GIT_BIN >/dev/null || die "git not installed in devbox"
+  resolve_required_tool git GIT_BIN >/dev/null || die "git not installed in devbox — install with: apt-get install -y git"
   [ -d "$WORKSPACE" ] || die "workspace not found: $WORKSPACE (set --workspace=DIR)"
   ok "workspace: $WORKSPACE"
   if [ ! -f "$BACKLOG" ]; then
