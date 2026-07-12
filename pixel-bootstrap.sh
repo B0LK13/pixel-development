@@ -95,7 +95,9 @@ for s in $SETUP_SCRIPTS; do
     [ -f "$d/$s" ] && { found="$d/$s"; break; }
   done
   if [ -n "$found" ]; then
-    cp "$found" "$DEST/$s" && ok "$s (copied from ${found%/*})"
+    cp "$found" "$DEST/$s" \
+      || die "could not copy $found to $DEST/$s — copy it there manually and re-run"
+    ok "$s (copied from ${found%/*})"
   else
     # Network path — fail closed: nothing is installed unless it downloads
     # whole AND matches the pinned digest. On failure the run stops here;
@@ -107,7 +109,9 @@ for s in $SETUP_SCRIPTS; do
     if curl -fsSL -o "$DLTMP/$s" "$REPO_BASE/$s" 2>/dev/null; then
       got="$(sha256_of "$DLTMP/$s")"
       if [ "$got" = "$exp" ]; then
-        mv "$DLTMP/$s" "$DEST/$s"; ok "$s (downloaded, sha256 verified)"
+        mv "$DLTMP/$s" "$DEST/$s" \
+          || die "could not install $s to $DEST — check free space"
+        ok "$s (downloaded, sha256 verified)"
       else
         die "checksum mismatch for $s — expected $exp, got ${got:-<unreadable>}; NOT installed (source may be tampered, or the pin is stale)"
       fi
@@ -116,7 +120,8 @@ for s in $SETUP_SCRIPTS; do
       die "could not download $s from $REPO_BASE — nothing installed. Put it next to this script, or fix --repo-base."
     fi
   fi
-  chmod +x "$DEST/$s" 2>/dev/null || true
+  chmod +x "$DEST/$s" 2>/dev/null \
+    || warn "could not chmod +x $DEST/$s — run: chmod +x '$DEST/$s'"
 done
 
 # ---------------------------------------------------------------------------
@@ -194,9 +199,15 @@ EOF
 step "4. Termux:Widget app"
 if [ "$OPEN_STORE" = 1 ]; then
   url="https://f-droid.org/packages/com.termux.widget/"
-  if have termux-open-url; then termux-open-url "$url"
-  elif have am; then am start -a android.intent.action.VIEW -d "$url" >/dev/null 2>&1; fi
-  ok "Opened Termux:Widget on F-Droid — install it, then add the widget to your home screen."
+  if have termux-open-url; then
+    termux-open-url "$url"
+    ok "Opened Termux:Widget on F-Droid — install it, then add the widget to your home screen."
+  elif have am; then
+    am start -a android.intent.action.VIEW -d "$url" >/dev/null 2>&1
+    ok "Opened Termux:Widget on F-Droid — install it, then add the widget to your home screen."
+  else
+    warn "no URL opener (termux-open-url/am) — install com.termux.widget from F-Droid manually: $url"
+  fi
 else
   info "Install the ${C_B}Termux:Widget${C_R} app from F-Droid (com.termux.widget) — re-run with --open-store to open it."
 fi
