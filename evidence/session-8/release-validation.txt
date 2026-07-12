@@ -1,0 +1,30 @@
+Session 8 release-validation evidence
+Generated: 2026-07-12T21:15:23Z (UTC)
+Fixture: clean clone of auto/integrate-session-8 @ d11ae8f (fixture tip d11ae8f), version 0.0.0
+(reserved CI/fixture version), SOURCE_DATE_EPOCH=1700000000.
+Signing key: throwaway ed25519 generated for this capture, non-production,
+discarded. Paths sanitized (<fixture> = a temporary directory).
+
+== build (SOURCE_DATE_EPOCH=1700000000, version 0.0.0 reserved fixture) ==
+release candidate built: <fixture>/out/pixel-development-0.0.0
+  version: 0.0.0  commit: d11ae8f43c6039d6cadac4bdc15126439c3ea439  artifacts: 4  created_at: 2023-11-14T22:13:20Z
+next: operator reviews, then signs offline (docs/RELEASE_SIGNING.md)
+
+== unsigned verify ==
+  ok   layout (9 core files, no unsafe entries)
+  ok   metadata (schema 1.0, version 0.0.0, commit d11ae8f43c60…, 4 artifacts)
+  ok   signing manifest (bound to version, commit, metadata digest, artifact hashes)
+  note signature: not provided — integrity-only verification
+  ok   checksums + modes (4 artifacts)
+integrity proven; authenticity NOT established (no verified signature)
+verdict: verified-integrity-only
+exit: 0
+
+== signed fixture verify (throwaway ed25519 key, non-production) ==
+  ok   layout (9 core files, no unsafe entries)
+  ok   metadata (schema 1.0, version 0.0.0, commit d11ae8f43c60…, 4 artifacts)
+  ok   signing manifest (bound to version, commit, metadata digest, artifact hashes)
+  ok   signature (detached openpgp over SIGNING-MANIFEST.json)
+  ok   checksums + modes (4 artifacts)
+verdict: verified-signed
+exit: 0
