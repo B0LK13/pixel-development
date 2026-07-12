@@ -1,0 +1,12 @@
+== session-9 local gate summary ==
+date: 2026-07-12T21:45:31+00:00
+branch: auto/integrate-session-8
+commit: 649725744c05bef940311a9563da8edbf948770a
+main: 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c (expected 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c)
+
+suite: passed: 309   failed: 0   skipped: 0  rc=0  539s
+ci-local: rc=0  553s
+key-material scan: 0 file(s) (expected 0)
+commit signatures over main..HEAD (%G? histogram, G=good):      89 G 
+
+durations are this-host measurements; no performance claim is made.

@@ -1,0 +1,30 @@
+== session-9 static workflow validation + parity matrix ==
+date: 2026-07-12T21:29:51+00:00
+
+YAML: parses cleanly (python yaml.safe_load); 2 jobs; push+pull_request triggers
+expressions: only ${{ github.ref }} and ${{ secrets }} absent; no unsupported inputs
+action inputs: actions/checkout@v4 with no inputs (valid)
+branch filters: push limited to main + auto/*; PR unfiltered (intended)
+space/equals-form: all script invocations equals-form (harness §22 pins this)
+quoting: RUNNER_TEMP expansions quoted; heredoc-free
+path assumptions: Linux runners only (ubuntu-latest); no Windows paths
+implicit secrets: none; permissions block present and minimal
+
+-- runner-environment risks (observed, not pre-emptively changed) --
+R1 shellcheck drift: local 0.11.0; ubuntu-24.04 apt ships 0.9.x (older = fewer
+   warnings = lower failure risk). Gate is shellcheck -S warning both sides.
+R2 suite timeout: job timeout 10m; local throttled host runs the full suite in
+   578-863s. Runner hardware is unthrottled x86; expected well under 10m, but
+   this is the first ever remote execution — observe, do not pre-adjust
+   (mandate: performance-only changes require evidence).
+R3 release job timeout 5m: local fixture capture ~2-3m throttled; expected OK.
+R4 first-run novelty: no .github/ on remote main; the workflow has never run
+   on GitHub infrastructure — unknown-unknowns possible.
+
+-- parity matrix --
+remote job              | local command                                   | expected        | publication risk
+suite                   | bash tests/run_tests.sh (+ diff --check,        | 309/0/0, rc 0   | none
+                        |  checksum --check, shellcheck — = ci-local.sh)  |                 |
+release-candidate-check | build 0.0.0 + unsigned verify + diff -r +       | both verdicts,  | none
+                        | throwaway-key signed verify (fixture clones)    | byte-identical  |
+every remote check has a local reproduction path: YES
