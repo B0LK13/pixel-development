@@ -1,0 +1,25 @@
+== session-13 baseline record ==
+date: 2026-07-13T17:48:02Z (session start) .. 2026-07-13T17:59:23Z (this record)
+branch: auto/session-13-release-dry-run-prep
+base: main @ 0508a044e059db1d2d20f240f6694b44e1a02b7b (created with:
+  git switch -c auto/session-13-release-dry-run-prep main)
+mandate: reports/project-roadmap.md Horizon 0 item 0.2 — prepare the first
+  signed-release dry run on a throwaway identity (agent prepares,
+  operator executes): runbook + rehearsal evidence + handoff report.
+  Docs + evidence only; no code changes, no tags, no push, no network.
+commands used:
+  git switch -c auto/session-13-release-dry-run-prep main
+  (runbook authored in docs/RELEASE_DRY_RUN.md; commit 6494af7, signed)
+  rehearsal: bash /tmp/s13-rehearsal.sh (uncommitted driver executing the
+    runbook's commands verbatim; see dry-run-rehearsal.txt for output)
+toolchain: gpg 2.4.8 / gpgv (gnupg), sha256sum, GNU date/touch, git
+host: proot-distro Ubuntu container inside Termux on Android (same host
+  class as sessions 4-10); offline for all rehearsal steps
+prior-art references (local-only, unpushed — do not merge from):
+  auto/session-11-signing-architecture
+  auto/session-12-release-trust-blueprint
+    (docs/SIGNING_ROADMAP.md phase 2 = the operator ceremony this dry
+     run rehearse-prepares; reports/session-12-final-report.md)
+boundaries: no production key material anywhere; throwaway keys only,
+  created under mktemp GNUPGHOME and destroyed in the same run; main and
+  the session-10/11/12 branches untouched
