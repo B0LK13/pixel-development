@@ -1,0 +1,5 @@
+OK pixel-apps-setup.sh
+OK pixel-autodev.sh
+OK pixel-bootstrap.sh
+OK pixel-dev-setup.sh
+OK tests/run_tests.sh

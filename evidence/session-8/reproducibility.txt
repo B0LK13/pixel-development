@@ -1,0 +1,18 @@
+Session 8 reproducibility evidence
+Generated: 2026-07-12T21:15:23Z (UTC)
+Method: two independent unsigned builds from the same clone/commit (d11ae8f43c6039d6cadac4bdc15126439c3ea439)
+with SOURCE_DATE_EPOCH=1700000000, then directory/content/mode/mtime compare.
+Build exit codes: 0 / 0.
+
+$ diff -r A B
+(no differences)
+
+$ compare mode+mtime+path listings (find -exec stat)
+IDENTICAL (10 entries)
+
+$ compare per-file sha256 listings
+IDENTICAL
+
+CONCLUSION: byte-for-byte reproducible when SOURCE_DATE_EPOCH is fixed.
+Harness section 27 additionally proves payload stability across differing
+epochs (only metadata created_at + bound manifest digest vary).

@@ -1,0 +1,22 @@
+# Bootstrap integrity pins — SHA-256 digests (schema v1).
+#
+# Scope: the three root-level shell entry points. pixel-bootstrap.sh verifies
+# network-fetched setup scripts against the digests embedded in ITSELF (kept
+# in lockstep with this file — harness section 16); this manifest additionally
+# pins pixel-bootstrap.sh itself, putting the anchor's digest on record for
+# the verified install flow (README.md §1) and for release verification.
+#
+# Established from: main @ 711c23b (dev/apps digests, 2026-07-11); the anchor
+# pin tracks the working tree and is re-pinned by any bootstrap change.
+#
+# Update procedure (any change to a pinned script — one lockstep workflow):
+#   1. update the embedded digests in pixel-bootstrap.sh (dev/apps only)
+#   2. refresh this manifest in the SAME commit
+#   3. all three must agree — harness §16 and CI go red otherwise
+# (Session 5: `bash scripts/update-bootstrap-checksums.sh --write` performs
+#  steps 1+2 deterministically; `--check` is the gate.)
+#
+# Format: <sha256>  <script name>  (sha256sum format, sorted by name)
+b7a341135e1abeb10004e28d8ea3505e758feef288556595339f6162e0179019  pixel-apps-setup.sh
+55b73f896e7cda9c52beaa60f150e5eba205bb69b18ee73399182e6a372f1138  pixel-bootstrap.sh
+444e59fb0e125f70c4c7b4ad03f7e6e8dd52b0af0ad7d71a41357abee310abc6  pixel-dev-setup.sh

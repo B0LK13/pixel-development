@@ -1,0 +1,22 @@
+Clean-clone smoke — session 4
+===========================
+Source: git clone --branch auto/integrate-session-4 (local clone of this repo)
+Clone tip under test: 57bc0f4 (auto/integrate-session-4)
+Command: bash tests/run_tests.sh (inside the fresh clone)
+
+Result: exit 0
+Suite:  passed: 146   failed: 0   skipped: 0
+Wall:   2m46s
+
+Notes:
+ - The clone contains only committed content; no working-tree artifacts
+   were carried over (evidence/, reports/ additions are inert to the harness).
+ - The harness also runs its own internal nested clean-clone smoke (section 8),
+   which passed inside this run.
+ - The post-merge auto/integrate-session-4 tip adds only evidence/report files,
+   so this run covers the final integration tree content as well.
+
+Last lines of the clone run log:
+    ok    metacharacter repo-base value is never executed
+
+  passed: 146   failed: 0   skipped: 0

@@ -150,7 +150,10 @@ invoked; no network calls were made by the audit itself.
 - **macOS**: product scripts require Termux; additionally GNU-isms would
   break: `sed 's/…/\+/…'` in `slugify` (`pixel-autodev.sh:177`), GNU-style
   `sed -i` (`pixel-apps-setup.sh:115`), and `timeout(1)` (absent from base
-  macOS). bash 3.2 itself would mostly cope, but the sed/timeout gaps are fatal.
+  macOS). bash 3.2 itself would mostly cope with the *product* scripts, but
+  the sed/timeout gaps are fatal, and the release tooling
+  (`scripts/update-bootstrap-checksums.sh`, `scripts/verify-release-bundle.sh`)
+  requires bash ≥4 for `declare -A`.
 - **WSL**: product scripts die at the Termux preflight by design. The
   *harness* would likely run (Linux bash + coreutils), but this is untested —
   no claim.
@@ -230,3 +233,249 @@ CI — those binaries occupy the preflight's scrubbed PATH prefix
 (`/root/.npm-global/bin:/root/.local/bin:/usr/local/bin:/usr/bin:/bin`), so
 a controlled-PATH absence test cannot be made hermetic without a new seam,
 and no seam is added solely for testing.
+
+## Session 4 follow-up (main @ 711c23b + auto/integrate-session-4)
+
+- **Integration.** Session 3 (`79617f4`, carrying Session 1–2 via `2bb8df1`)
+  was promoted to `main` as `711c23b` (`--no-ff`, not pushed). Session 4
+  follow-up work rides `auto/integrate-session-4` for operator review.
+- **Preflight testability — implemented.** The caveat above is closed:
+  dependency resolution is centralized in `resolve_required_tool`
+  (`pixel-autodev.sh:99-117`) with per-tool override seams (`TIMEOUT_BIN`,
+  `GIT_BIN`, `CLAUDE_BIN`, `CODEX_BIN`). Set-empty simulates absence, so the
+  missing-`timeout`/missing-`git`/missing-agent die paths are now hermetically
+  tested (harness §15), including validation-before-resolution ordering and
+  no-state-on-failure. Production behavior with seams unset is byte-identical.
+- **R1 — implemented (scoped).** `pixel-bootstrap.sh` now downloads the two
+  setup scripts to a temp file, verifies SHA-256 against vendored pins
+  (`config/bootstrap-checksums.txt` + embedded copies, sync enforced by
+  harness §16), and installs only on match — failing closed on download
+  failure, missing digest, missing hash tool, or mismatch (temp removed via
+  `EXIT` trap). This also fixes the latent defect where a failed curl left a
+  partial, later-executed file in `$DEST`. Hermetic proof via `curl file://`
+  fixtures (harness §17): no public network needed.
+  - **Threat model / what the pins do and do not buy.** They give integrity
+    against drift, mirror substitution (a `--repo-base` mirror is now safe
+    for the pinned content), truncation, and maintainer inconsistency
+    (lockstep test goes red). They do **not** give authenticity: the trust
+    anchor — `pixel-bootstrap.sh` itself — still arrives over the same
+    unauthenticated `curl | bash` channel as the payloads, so an attacker who
+    can substitute payloads can substitute the anchor and its embedded pins.
+  - **Residual blocked sub-item (formal).** Authenticity for the anchor
+    itself. Prerequisites: (1) upstream signed releases (minisign/gpg) or an
+    out-of-band checksum channel the user verifies once (e.g. a digest
+    published on an independent page and pasted at install time); (2) a
+    signature-verification tool present in Termux; (3) migration of the
+    README one-liner to "fetch → verify → execute". Acceptance criteria:
+    anchor verified before execution with a key established out of band;
+    hermetic fixture tests mirroring §17. Until then the README privacy
+    section documents the TLS-only trust level.
+  - The third-party installer pipes inside `pixel-dev-setup.sh`
+    (nodesource, claude.ai, astral.sh) remain as-is under the charter's
+    package-install exception — different trust boundary (vendor CLIs, not
+    this repo's payloads), out of R1's scope.
+- **CI.** Added the one gate the workflow did not execute directly
+  (`git diff --check`); trigger rules unchanged, `auto/*` still covered.
+  Remote CI remains operator-owned (no push this session).
+- **R4** — unchanged: document-only; `--` stays an unknown flag (exit 2),
+  pinned by harness §7/§12.
+
+## Session 5 follow-up (main @ 711c23b + auto/integrate-session-5)
+
+- **R1 anchor authenticity — materially reduced (Tier 1 implemented; Tier 2
+  mechanics ready; production signing operator-blocked).** The Session 4
+  residual sub-item now has an architecture
+  (`docs/adr/ADR-BOOTSTRAP-ANCHOR-AUTHENTICITY.md`, target Option D:
+  versioned release + immutable reference + SHA-256 + detached signature)
+  and a formal trust model (`docs/BOOTSTRAP_TRUST_MODEL.md`):
+  - *Tier 1 (implemented).* The README one-liner is replaced by a verified
+    flow: fetch `pixel-bootstrap.sh` from an immutable commit-pinned URL,
+    verify its SHA-256 obtained out of band, run it with `PIXEL_REPO_BASE`
+    pinned to the same commit so both payloads come from the same immutable
+    ref. The pin contract is tested against the real git object (harness
+    §18). No `curl | bash` path remains in the primary documentation.
+  - *Tier 2 (mechanics implemented).* `scripts/verify-bootstrap-signature.sh`
+    verifies a detached gpg signature with an operator-supplied keyring
+    (`GPGV_BIN` seam; usage errors exit 2, verification failures exit 1).
+    Hermetic ed25519 fixtures in harness §19. Production signing — a real
+    project key, a published fingerprint, signed release artifacts — is
+    operator-blocked: the loop must not invent a trusted identity.
+    Prerequisites and acceptance criteria live in the ADR.
+  - *Residual risk (reduced, not eliminated).* Repository-host or account
+    compromise still defeats Tier 1; authenticity today rests on the
+    out-of-band digest channel, and from the first signed release onward on
+    the published key fingerprint. Documented in the trust model.
+- **Checksum lifecycle governance — implemented.**
+  `scripts/update-bootstrap-checksums.sh` (`--check` default, non-mutating,
+  exit 1 when stale with itemized drift; `--write` updates the embedded
+  digests first, then atomically replaces the manifest; rejects malformed,
+  duplicate, or unexpected entries, symlink escapes, and missing artifacts;
+  no network). The two sources of truth — manifest and embedded pins — can
+  no longer drift silently: check mode is a local gate, a CI step, and
+  harness §16/§20.
+- **CI operational verification — implemented locally.** The workflow gained
+  the checksum lockstep step; `scripts/ci-local.sh` runs the same five gates
+  network-free from any cwd (`git diff --check`, checksum `--check`,
+  `bash -n` on all tracked shell scripts, ShellCheck on all tracked shell
+  scripts, full suite), failing fast with the failing step's exit status.
+  Parity is pinned by harness §22. Remote CI remains operator-owned: nothing
+  was pushed; triggers already cover `auto/*`.
+- **Release readiness — documented.** `docs/BOOTSTRAP_RELEASE_PROCESS.md`:
+  SemVer + signed-tag model, immutable commit references, checksum manifest
+  schema v1, compatibility guarantees, minimum supported bootstrap,
+  update/rollback and key-compromise procedures, operator release checklist.
+  Governance test §21 ties the documented current pin to the git object.
+- **Signal hardening — implemented.** `pixel-bootstrap.sh` routes INT/TERM
+  through the EXIT trap, so a mid-download interrupt removes the temp
+  download dir (harness §23). Installed-script permissions are pinned at
+  755 by test.
+- **Lint coverage defect fixed.** Harness §0/§1/§2 previously covered only
+  the top-level scripts; they now iterate `git ls-files '*.sh'` (8 scripts),
+  closing the `scripts/*.sh` blind spot.
+- **Performance budget — measured, not optimized.** Full suite 3m31s
+  (baseline ≈2m45s); the nested clean-clone proof is ≈48–50% of wall time
+  (101–109s) and is retained per charter. Opt-in per-section profiler:
+  `PIXEL_TEST_TIMINGS=1` (evidence/session-5/test-timings.txt). No assertion
+  removed; correctness took priority over the modest available reduction.
+- **R4** — unchanged: document-only; `--` stays an unknown flag (exit 2),
+  pinned by harness §7/§12.
+- **Remote CI** — not run (no push). Static workflow validation plus local
+  parity only; operator-triggered run instructions are in
+  `reports/session-5-final-report.md`.
+
+## Session 6 follow-up (main @ 711c23b + auto/integrate-session-6)
+
+- **Release-candidate builder — implemented.**
+  `scripts/build-release-candidate.sh` assembles a deterministic 9-file
+  bundle directory (the three pinned scripts, `bootstrap-checksums.txt`,
+  `SHA256SUMS`, `RELEASE-METADATA.json`, `SIGNING-MANIFEST.json`,
+  `INSTALL.md`, `VERIFY.md`). Strict SemVer via `--version=X.Y.Z`, dirty-tree
+  refusal (untracked included), full-40-hex commit capture, checksum-manifest
+  lockstep gate, atomic temp-then-rename output, `SOURCE_DATE_EPOCH` pinning
+  for created_at and mtimes. Failure injection covered by harness §24.
+- **Release metadata + signing manifest — implemented.** Schema v1 with
+  deterministic one-line sorted artifact objects, lowercase SHA-256, role and
+  mode policy, traversal/duplicate rejection. `SIGNING-MANIFEST.json` binds
+  version + commit + `release_metadata_sha256` + artifact digests and names
+  the expected detached signature (`SIGNING-MANIFEST.json.asc`).
+- **Offline bundle verifier — implemented.**
+  `scripts/verify-release-bundle.sh` checks layout allowlist → metadata
+  schema → manifest consistency → optional `gpgv` signature → checksums,
+  modes, and `SHA256SUMS` agreement, in that order. Verdicts:
+  `verified-integrity-only` / `verified-signed` / `failed-layout` /
+  `failed-metadata` / `failed-signature` / `failed-checksum` /
+  `failed-policy`; exit 0/1/2. Failure injection per layer in harness §25;
+  signed ed25519 fixtures in §26 (valid sig, altered artifact, altered
+  metadata, wrong keyring, missing signature, `--require-signature`).
+- **Reproducibility — proven, not claimed.** Two independent
+  `SOURCE_DATE_EPOCH`-pinned builds from the same commit are byte-identical
+  (content, modes, mtimes; harness §27, evidence/session-6/reproducibility.txt).
+  A different epoch changes only the two JSON files.
+- **Archive handling — decision recorded.** The canonical release artifact is
+  the bundle *directory*; deterministic GNU-tar packaging is documented as an
+  operator/CI step, never a release gate; `.zip` is not produced.
+  (`docs/BOOTSTRAP_RELEASE_PROCESS.md` §6.)
+- **CI release validation — implemented, publish-free.** The workflow gained
+  a bounded `release-candidate-check` job: fixture build with reserved
+  version `0.0.0`, unsigned verify, second-build reproducibility (`diff -r`),
+  then a per-run throwaway ed25519 key for the signed `--require-signature`
+  verify. No tags, releases, pushes, or production identities; contract
+  pinned by harness §22.
+- **Operator documentation — implemented.** `docs/RELEASE_SIGNING.md`
+  (offline sign + verify + policy), `docs/SIGNING_KEY_LIFECYCLE.md`
+  (custody/rotation/revocation/compromise, no key material),
+  `docs/REMOTE_CI_VERIFICATION.md` (push/watch/inspect/cleanup runbook);
+  README §11 links all three; harness §28 pins the doc contracts and proves
+  the verifier side-effect free (invariant 18).
+- **Test runtime — classified, not filtered.** The default suite remains the
+  only sanctioned gate and runs everything; `PIXEL_TESTS_NO_CLONE=1` stays a
+  documented dev convenience. Wall time grew with the release sections
+  (isolated components are fast: clone ≈2s, builder ≈3s, verifier ≈3s;
+  multi-minute variance on this host is thermal throttling, measured, not a
+  suite defect). No assertion removed; no harness filters added.
+- **R-items** — unchanged from Session 5. R4 remains document-only (`--`
+  stays an unknown flag, exit 2).
+- **Remote CI** — not run (no push). Static workflow validation plus local
+  parity (`scripts/ci-local.sh`) only; the operator runbook is
+  `docs/REMOTE_CI_VERIFICATION.md`.
+
+## Session 7 follow-up (main @ 711c23b + auto/repo-readiness-fixes)
+
+The session opened with an interruption recovery: state was reconstructed
+into `reports/session-7-recovery.md`, and the in-flight security finding was
+root-caused **before** any code change. Commits this session: `b0a8eda`
+(prompt hardening + regression test), `9526e80` (recovery report + baseline
+evidence), `5a0d1f6` (README layout), `818daca` (docs flag forms),
+`4f64be3` (test hermeticity), `a2ed5e8` (`--help` banners + checksums).
+
+- **F17 — INFORMATIONAL — backlog-derived data in prompt construction
+  (verified inert; hardened structurally).** The in-flight finding suspected
+  command substitution in the unquoted heredoc that builds the agent prompt
+  from BACKLOG.md text. Root cause: bash performs substitution on the
+  literal heredoc text but never rescans parameter-expanded values, so a
+  `$(...)`/backtick payload in `$text` is written literally and never
+  executes — proven both in a minimal case and on the full dispatch path
+  (evidence in `reports/session-7-recovery.md`). Hardened anyway: all
+  backlog-derived values now route through `printf %s` with a
+  quoted-heredoc static body — byte-identical output for benign input, and
+  the invariant is structural instead of incidental (safe against future
+  `eval`/`sh -c`/`echo -e` edits). Pinned by regression test 6f;
+  timeout-path block renumbered 6f→6g.
+- **F18 — LOW — test fixtures inherited the host's `commit.gpgsign`
+  (FIXED).** `mk_ws` created fixture repos without overriding the host's
+  global `commit.gpgsign=true`, so fixture commits signed with the
+  operator's real `~/.gnupg` keyring — a hermeticity break that also failed
+  the suite with gpg lock errors. Action: `mk_ws` sets
+  `commit.gpgsign false` (`tests/run_tests.sh:122-123`), matching the
+  existing `mk_rc_clone` convention (`:1000-1001`). Verification: full
+  suite green with zero gpg interaction (`evidence/session-7/ci-parity.txt`).
+- **F19 — LOW — `--help` handlers printed script source past the banner
+  (FIXED).** Three handlers used stale `sed -n '2,Np'` ranges after earlier
+  banner edits — dev-setup `2,20`, apps-setup `2,22`, autodev `2,20` —
+  printing `set -uo pipefail` and section headers after the banner,
+  violating the CLI contract ("prints the header comment block"). Ranges
+  corrected to `2,16` / `2,17` / `2,15` (bootstrap's `2,15` was already
+  exact). Contract now pinned by a suite assertion: every `--help` line
+  must end with `#` after the prefix strip. Checksum manifest and the
+  embedded digests in `pixel-bootstrap.sh` refreshed in lockstep.
+- **Unknown-flag-on-stdout — reviewed, no action.** The `Unknown flag: …`
+  line goes to stdout in some scripts; confirmed a documented contract
+  decision (`docs/CLI_CONTRACT.md` §1: "the unknown-flag line is historical
+  `stdout` (both exit 2)"), not a defect.
+- **Documentation consistency — verified.** Living docs fixed to the
+  verifier's equals-only flag forms (`818daca`; the Session 6 report keeps
+  its historical wording deliberately); README repo layout current
+  (`5a0d1f6`). Final sweep: zero space-form bundle-verifier invocations
+  remain in `docs/` or README; harness §28 doc contracts green.
+- **Dependency audit — no new dependencies.** External command inventory
+  unchanged in kind: `git`, `ssh`/`sshd`, `pkg`/`apt` (Termux/proot layer),
+  `curl` (installers only — F8/R1 status quo), `gpg`/`gpgv` (signature
+  verification; tests and CI use throwaway ed25519 fixtures), `jq`,
+  `node`/`npm`, `python3`/`uv`, `sha256sum`, GNU `timeout`, coreutils
+  (`stat`/`find`/`mktemp`). No new third-party code, no version changes.
+- **Security review — invariants hold.** All 18 release/security invariants
+  re-verified by the full suite (§24–§28) at the session tip: 288 passed /
+  0 failed / 0 skipped. The session's only security-relevant code change
+  converted an incidentally-safe path into a structurally-safe one (F17).
+- **Reproducibility — re-proven at the session tip.** Two
+  `SOURCE_DATE_EPOCH=1700000000` builds from `a2ed5e8` are byte-identical
+  (content, modes, mtimes; `evidence/session-7/reproducibility.txt`).
+- **Release validation — re-run at the session tip.** Fixture build `0.0.0`
+  from a clean clone of `a2ed5e8`: unsigned verify verdict
+  `verified-integrity-only`, signed fixture verify (throwaway ed25519)
+  verdict `verified-signed`, both exit 0
+  (`evidence/session-7/release-verify.txt`).
+- **Performance — measured, profile unchanged.** Full gate chain 4–9 min on
+  this host (thermal throttling; `evidence/session-7/test-timings.txt`);
+  isolated components stay fast (clone ≈2s, builder ≈3s, verifier ≈3s). No
+  assertions removed, no harness filters added.
+- **Technical-debt inventory.** R-register: R2/R3/R5/R6 implemented
+  (Session 3); R1 (installer checksum pinning — needs upstream-published
+  checksums plus a network fixture) and R4 (`--` end-of-options — no
+  concrete need) remain deferred, unchanged. No new R-items. Host-level
+  observation, outside repo scope: stale `~/.gnupg` lock files from killed
+  gpg processes; reported to the operator, left untouched.
+- **Remote CI — not run (no push).** Local parity (`scripts/ci-local.sh`)
+  at the session tip: ALL GATES PASSED (5/5)
+  (`evidence/session-7/ci-parity.txt`). Operator runbook unchanged:
+  `docs/REMOTE_CI_VERIFICATION.md`.

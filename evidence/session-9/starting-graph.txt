@@ -1,0 +1,61 @@
+== session-9 starting graph ==
+date: 2026-07-12T21:26:26+00:00
+branch: auto/integrate-session-8
+HEAD: 649725744c05bef940311a9563da8edbf948770a
+main: 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c
+merge-base(main, integrate): 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c
+ahead: 89  behind: 0
+main contains session 1-8 work: no (merge-base == main)
+d11ae8f in ancestry: yes
+worktrees: 1 (expected 1)
+working tree: 0 changes outside evidence/session-9 (expected 0; this evidence directory is the session-9 work in progress)
+
+== integrate branch tips ==
+auto/integrate-session-8 6497257 2026-07-12
+auto/integrate-session-6 ce8cc92 2026-07-11
+auto/integrate-session-5 a97d95b 2026-07-11
+auto/integrate-session-4 c8a5466 2026-07-11
+auto/integrate-session-3 79617f4 2026-07-11
+auto/integrate-session-1 2bb8df1 2026-07-11
+
+== left-right graph main...auto/integrate-session-8 (first 40) ==
+> 6497257 fix: final-status v3 — clean-apart-from-this-file capture semantics
+> 3bbb205 fix: regenerate final-status after rewording the key-scan phrasing
+> 5a849c6 chore: add session 8 final status (clean tree, deliverables, verdicts)
+>   65f9d83 Merge branch 'auto/session-8-evidence' into auto/integrate-session-8
+|\  
+| > 1170628 chore: add session 8 final evidence and completion report
+|/  
+>   d11ae8f Merge branch 'auto/session-8-diagnostics' into auto/integrate-session-8
+|\  
+| > d7ec726 docs(reports): record D1-D4 implementation with commit refs and test pins
+| > d375548 test(harness): failed-test recap, nested-clone log capture, D1/D2/D4 pins
+| > 8b4dbff fix(apps-setup): log FATAL on die for post-mortem diagnosis (D4)
+| > 4d3a689 fix(bootstrap): fail closed on copy/install errors, per-branch opener status (D1/D2)
+| >   f3ebd61 Merge branch 'auto/integrate-session-8' into auto/session-8-diagnostics
+| |\  
+| |/  
+|/|   
+> |   ac906e1 Merge branch 'auto/session-8-docs-roadmap' into auto/integrate-session-8
+|\ \  
+| > | 6d0f018 docs(reports): add session 8 technical-debt register and project roadmap
+> | |   7d9c70f Merge branch 'auto/session-8-developer-experience' into auto/integrate-session-8
+|\ \ \  
+| > | | aebfef3 docs(reports): add session 8 developer-experience review
+| > | | 676498f docs: README parity+knobs block, bash >=4 floor, release-checklist bundle bridge, new contributor/operator docs
+| > | | 564a1e1 fix: append install hints to the two bare missing-tool deaths
+| > | | df25374 test(harness): extend §3 --help/banner/unknown-flag contract to release tools
+| > | | bca1858 fix: end release-script --help ranges at the banner border + ci-local arg handling
+> | | |   54c96b1 Merge branch 'auto/session-8-ci-efficiency' into auto/integrate-session-8
+|\ \ \ \  
+| > | | | 40b5a2a docs(reports): add session 8 CI efficiency analysis
+| > | | | 66aedb9 fix: use equals-form release flags in the CI release job
+> | | | |   ce1ce3f Merge branch 'auto/session-8-config-quality' into auto/integrate-session-8
+|\ \ \ \ \  
+| | |/ / /  
+| |/| | |   
+| > | | | 08f665e docs(reports): add session 8 configuration-quality review
+| > | | | c306e7f fix: fail closed when the download temp dir cannot be created
+| > | | | 884abe9 docs: correct stale pixel-autodev.sh line refs in CLI_CONTRACT
+| > | | | dcd3bb3 fix: never mark a task done when git commit fails
+> | | | | 1d5406d Merge branch 'auto/session-8-architecture' into auto/integrate-session-8

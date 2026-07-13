@@ -7,7 +7,11 @@
 #  this harness) · --help/flag contract · .pixel-lab.json validity ·          #
 #  pixel-autodev.sh behaviour (dry-run, seeding, --timeout contract,          #
 #  end-to-end success/timeout paths via stub agents) · CLI contract extras ·  #
-#  clean-clone smoke. Hermetic: no network, no paid agents, no repo writes.   #
+#  clean-clone smoke · ssh-port / numeric / --agent flag contracts ·          #
+#  checksum manifest lockstep · release-candidate builder · bundle verifier   #
+#  (unsigned + signed fixtures + failure injection) · reproducibility ·       #
+#  CI workflow parity · release docs contracts · repository readiness.        #
+#  Hermetic: no network, no paid agents, no repo writes.                      #
 #                                                                             #
 #  Usage: bash tests/run_tests.sh        (exit 0 = all green)                 #
 #  Set PIXEL_TESTS_NO_CLONE=1 to skip the nested clean-clone smoke test.      #
@@ -17,30 +21,55 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || { echo "cannot cd to repo root: $ROOT" >&2; exit 1; }
 
-PASS=0; FAIL=0; SKIP=0
-t_ok(){   PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; }
-t_fail(){ FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | head -20 | sed 's/^/        /'; }
-t_skip(){ SKIP=$((SKIP+1)); printf '  skip  %s\n' "$1"; }
+PASS=0; FAIL=0; SKIP=0; FAILED_TESTS=()
+# Optional per-test profiler (session 5): PIXEL_TEST_TIMINGS=1 prints elapsed
+# seconds since the previous test to stderr. Default behaviour is untouched.
+if [ "${PIXEL_TEST_TIMINGS:-0}" = 1 ]; then
+  _tt_last=$SECONDS
+  _tt_mark(){ local now=$SECONDS; printf 'TIMING %4ds  %s\n' "$((now-_tt_last))" "$1" >&2; _tt_last=$now; }
+else
+  _tt_mark(){ :; }
+fi
+t_ok(){   PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; _tt_mark "$1"; }
+t_fail(){ FAIL=$((FAIL+1)); FAILED_TESTS+=("$1"); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | head -20 | sed 's/^/        /'; _tt_mark "FAIL $1"; }
+t_skip(){ SKIP=$((SKIP+1)); printf '  skip  %s\n' "$1"; _tt_mark "skip $1"; }
 
 SCRIPTS=(pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh)
+
+# Every tracked shell script (for syntax/lint gates). Heredoc-fed, not
+# process substitution — /dev/fd is absent on some supported environments.
+lint_files="$(git ls-files '*.sh' 2>/dev/null)" || lint_files=
+if [ -z "$lint_files" ]; then
+  lint_files="$(printf '%s\n' \
+    pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh \
+    tests/run_tests.sh \
+    scripts/verify-bootstrap-signature.sh scripts/update-bootstrap-checksums.sh \
+    scripts/ci-local.sh scripts/build-release-candidate.sh scripts/verify-release-bundle.sh)"
+fi
 
 echo "== pixel-development test suite =="
 
 # --- 0. Required files --------------------------------------------------------
-for f in "${SCRIPTS[@]}" .pixel-lab.json; do
+for f in "${SCRIPTS[@]}" scripts/verify-bootstrap-signature.sh scripts/update-bootstrap-checksums.sh scripts/ci-local.sh scripts/build-release-candidate.sh scripts/verify-release-bundle.sh config/bootstrap-checksums.txt .pixel-lab.json; do
   if [ -f "$f" ]; then t_ok "required file present: $f"; else t_fail "required file missing: $f"; fi
 done
 
-# --- 1. Syntax ----------------------------------------------------------------
-for s in "${SCRIPTS[@]}"; do
+# --- 1. Syntax (every tracked shell script) ------------------------------------
+while IFS= read -r s; do
+  [ -n "$s" ] || continue
   if err="$(bash -n "$s" 2>&1)"; then t_ok "syntax: $s"; else t_fail "syntax: $s" "$err"; fi
-done
+done <<EOF
+$lint_files
+EOF
 
-# --- 2. Shellcheck (severity warning and up), including this harness -----------
+# --- 2. Shellcheck (severity warning and up), every tracked shell script -------
 if command -v shellcheck >/dev/null 2>&1; then
-  for s in "${SCRIPTS[@]}" tests/run_tests.sh; do
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
     if out="$(shellcheck -S warning "$s" 2>&1)"; then t_ok "shellcheck: $s"; else t_fail "shellcheck: $s" "$out"; fi
-  done
+  done <<EOF
+$lint_files
+EOF
 else
   t_skip "shellcheck not installed — lint gate skipped (pkg install shellcheck)"
 fi
@@ -49,6 +78,28 @@ fi
 for s in "${SCRIPTS[@]}"; do
   out="$(bash "$s" --help 2>&1)"; rc=$?
   if [ $rc -eq 0 ] && [ -n "$out" ]; then t_ok "--help exits 0 with usage: $s"; else t_fail "--help: $s" "rc=$rc"; fi
+  # banner-only output: the sed range must end at the banner border, never leak
+  # script source (every banner line ends with '#' after the prefix strip)
+  if [ -n "$out" ] && [ -z "$(printf '%s\n' "$out" | grep -v '#$')" ]; then
+    t_ok "--help prints banner only, no source leak: $s"
+  else
+    t_fail "--help leaks script source: $s" "$(printf '%s\n' "$out" | grep -v '#$' | head -3)"
+  fi
+  bash "$s" --definitely-not-a-flag >/dev/null 2>&1; rc=$?
+  if [ $rc -eq 2 ]; then t_ok "unknown flag exits 2: $s"; else t_fail "unknown flag: $s" "rc=$rc (want 2)"; fi
+done
+# the release tools get the same contract (README §8: every script supports
+# --help; the release banners' interior lines all end with '#')
+for s in scripts/build-release-candidate.sh scripts/update-bootstrap-checksums.sh \
+         scripts/verify-bootstrap-signature.sh scripts/verify-release-bundle.sh \
+         scripts/ci-local.sh; do
+  out="$(bash "$s" --help 2>&1)"; rc=$?
+  if [ $rc -eq 0 ] && [ -n "$out" ]; then t_ok "--help exits 0 with usage: $s"; else t_fail "--help: $s" "rc=$rc"; fi
+  if [ -n "$out" ] && [ -z "$(printf '%s\n' "$out" | grep -v '#$')" ]; then
+    t_ok "--help prints banner only, no source leak: $s"
+  else
+    t_fail "--help leaks script source: $s" "$(printf '%s\n' "$out" | grep -v '#$' | head -3)"
+  fi
   bash "$s" --definitely-not-a-flag >/dev/null 2>&1; rc=$?
   if [ $rc -eq 2 ]; then t_ok "unknown flag exits 2: $s"; else t_fail "unknown flag: $s" "rc=$rc (want 2)"; fi
 done
@@ -74,7 +125,9 @@ mkdir -p "$tmp/bin"
 # stub agents/tools so the suite is hermetic on any host (CI may lack them).
 # autodev's preflight resolves these by name; agent dispatch itself goes
 # through the CLAUDE_BIN/CODEX_BIN seams, so no real agent is ever invoked.
-for tool in claude codex; do
+# pkg backs the bootstrap Termux preflight so download-verification tests can
+# run outside Termux.
+for tool in claude codex pkg; do
   printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/$tool"
   chmod +x "$tmp/bin/$tool"
 done
@@ -89,6 +142,8 @@ APATH="$tmp/bin:$PATH"
 mk_ws(){
   local d="$1"; mkdir -p "$d"; git -C "$d" init -q 2>/dev/null
   git -C "$d" config user.name t; git -C "$d" config user.email t@t
+  # fixtures never sign: the host's global commit.gpgsign must not leak in
+  git -C "$d" config commit.gpgsign false
   printf '# test charter\n' > "$d/PIXEL_AGENT.md"
   printf '.autodev/\n' > "$d/.gitignore"
   git -C "$d" add -A && git -C "$d" commit -qm init >/dev/null
@@ -177,7 +232,22 @@ else
   t_fail "autodev success path" "rc=$rc last=$last"$'\n'"$out"
 fi
 
-# 6f. end-to-end timeout path per backend (stub sleeps past a 1s limit)
+# 6f. backlog task text is data, never code: prompt construction routes every
+#     backlog-derived value through printf %s with a quoted-heredoc static
+#     body — a $(...) or backtick payload in a backlog line must NOT execute
+#     when the prompt is written (or anywhere else in the dispatch path).
+ws7i="$tmp/ws7i"; mk_ws "$ws7i"
+pwn="$tmp/pwned-heredoc"
+printf -- '- [ ] Fix docs $(touch %s) and `touch %s.b`\n' "$pwn" "$pwn" > "$ws7i/BACKLOG.md"
+git -C "$ws7i" add -A && git -C "$ws7i" commit -qm task >/dev/null
+out="$(env PATH="$APATH" CLAUDE_BIN="$tmp/bin/fake-claude" bash "$ROOT/pixel-autodev.sh" --workspace="$ws7i" --timeout=30 2>&1)"; rc=$?
+if [ ! -e "$pwn" ] && [ ! -e "$pwn.b" ]; then
+  t_ok "backlog task text is inert (prompt built without shell expansion of data)"
+else
+  t_fail "backlog task text executed" "payload files: $(ls "$pwn"* 2>/dev/null)"
+fi
+
+# 6g. end-to-end timeout path per backend (stub sleeps past a 1s limit)
 printf '#!/usr/bin/env bash\nsleep 30\nexit 0\n' > "$tmp/bin/slow-agent"
 chmod +x "$tmp/bin/slow-agent"
 timeout_case(){ # $1 ws-dir  $2 task  $3 agent(claude|codex)
@@ -201,6 +271,28 @@ timeout_case(){ # $1 ws-dir  $2 task  $3 agent(claude|codex)
 timeout_case "$tmp/ws8" "Probe claude timeout path" claude
 timeout_case "$tmp/ws9" "Probe codex timeout path" codex
 
+# 6h. commit failure is never reported as done: when git commit fails (here
+#     forced via commit.gpgsign=true with a nonexistent signing key — the
+#     way a host with broken signing config behaves), the backlog must NOT
+#     flip, no feat(auto) commit may exist, and the run must say so. The
+#     "commit only on green" contract is void if a failed commit claims DONE.
+ws7c="$tmp/ws7c"; mk_ws "$ws7c"
+printf -- '- [ ] Probe commit-failure honesty\n' > "$ws7c/BACKLOG.md"
+git -C "$ws7c" add -A && git -C "$ws7c" commit -qm task >/dev/null
+# fixtures default to commit.gpgsign=false (session 7 hermeticity); override
+# to simulate the broken-host case (verified: rc=128 "No secret key", fast)
+git -C "$ws7c" config commit.gpgsign true
+git -C "$ws7c" config user.signingkey 0000000000000000
+out="$(env PATH="$APATH" CLAUDE_BIN="$tmp/bin/fake-claude" bash "$ROOT/pixel-autodev.sh" --workspace="$ws7c" --timeout=30 2>&1)"; rc=$?
+last="$(git -C "$ws7c" log --format=%s -1 2>/dev/null)"
+if [ $rc -eq 0 ] && [ "$last" = "task" ] \
+   && grep -q '^- \[ \] Probe commit-failure honesty' "$ws7c/BACKLOG.md" \
+   && case "$out" in *"commit failed"*) true;; *) false;; esac; then
+  t_ok "commit failure: task stays open, no DONE claim, no commit created"
+else
+  t_fail "autodev commit-failure honesty" "rc=$rc last=$last"$'\n'"$out"
+fi
+
 # --- 7. CLI contract extras (document current behaviour) -------------------------
 # space-form value flags are NOT supported (equals syntax only) → usage error
 bash "$ROOT/pixel-apps-setup.sh" --ssh-port 9022 >/dev/null 2>&1; rc=$?
@@ -213,6 +305,20 @@ if [ $rc -eq 2 ]; then t_ok "bootstrap bare '--repo-base' rejected with exit 2";
 # '--' is not special-cased today → unknown flag (documented, not changed)
 bash "$ROOT/pixel-bootstrap.sh" -- >/dev/null 2>&1; rc=$?
 if [ $rc -eq 2 ]; then t_ok "bootstrap '--' currently rejected as unknown flag"; else t_fail "'--' handling" "rc=$rc (want 2)"; fi
+
+# --- 8. clean-clone smoke (fast, hermetic, non-recursive) -------------------------
+if [ "${PIXEL_TESTS_NO_CLONE:-0}" = 1 ]; then
+  t_skip "clean-clone smoke (nested run)"
+else
+  clone="$tmp/clean clone"
+  if git clone -q --local "$ROOT" "$clone" 2>/dev/null \
+     && ( cd "$clone" && PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh >"$tmp/nested-clone.log" 2>&1 ); then
+    t_ok "clean-clone smoke: suite passes from a fresh clone"
+  else
+    t_fail "clean-clone smoke: suite must pass from a fresh clone" \
+      "last lines of the nested run:"$'\n'"$(tail -20 "$tmp/nested-clone.log" 2>/dev/null)"
+  fi
+fi
 
 # --- 9. --ssh-port contract (pixel-apps-setup.sh) --------------------------------
 # Throwaway HOME (with a space): any side effect (the log file) becomes
@@ -262,17 +368,13 @@ if [ $rc -eq 1 ]; then t_ok "duplicate --ssh-port: later valid overrides earlier
 err="$(run_apps --ssh-port=2000 --ssh-port=abc 2>&1 >/dev/null)"; rc=$?
 if [ $rc -eq 2 ]; then t_ok "duplicate --ssh-port: later invalid rejected (last-wins validated)"; else t_fail "duplicate ssh-port invalid-last" "rc=$rc"; fi
 
-# --- 8. clean-clone smoke (fast, hermetic, non-recursive) -------------------------
-if [ "${PIXEL_TESTS_NO_CLONE:-0}" = 1 ]; then
-  t_skip "clean-clone smoke (nested run)"
+# 9d. die() records FATAL in the log file (session 8, D4): every 9b run dies in
+#     the Termux preflight after the log file is created, so the throwaway-HOME
+#     log must carry the FATAL line for post-mortem diagnosis.
+if grep -q 'FATAL .*Run inside Termux' "$apps_home/pixel-apps-setup.log" 2>/dev/null; then
+  t_ok "apps-setup die() records FATAL in the log file"
 else
-  clone="$tmp/clean clone"
-  if git clone -q --local "$ROOT" "$clone" 2>/dev/null \
-     && ( cd "$clone" && PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh >/dev/null 2>&1 ); then
-    t_ok "clean-clone smoke: suite passes from a fresh clone"
-  else
-    t_fail "clean-clone smoke: suite must pass from a fresh clone"
-  fi
+  t_fail "apps-setup die() must log FATAL" "$(tail -3 "$apps_home/pixel-apps-setup.log" 2>/dev/null)"
 fi
 
 # --- 10. numeric flag contract (pixel-autodev.sh) --------------------------------
@@ -432,7 +534,1133 @@ else
   t_fail "git check-attr eol" "got: $attr"
 fi
 
+# --- 15. dependency-resolution seam (pixel-autodev.sh preflight) -------------------
+# Seam: TIMEOUT_BIN / GIT_BIN / CLAUDE_BIN / CODEX_BIN. Set-empty simulates a
+# missing tool hermetically. Every failure must be exit 1, name the tool on
+# stderr, and leave the workspace untouched (no .autodev, no seeded files).
+seam_fail(){ # $1 want-substring  $2 ws-dir  $3.. env-assignments + args
+  local want="$1" w="$2"; shift 2
+  mkdir -p "$w"
+  err="$(env "$@" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ] && case "$err" in *"$want"*) true;; *) false;; esac && [ -z "$(ls -A "$w")" ]; then
+    t_ok "preflight fails closed: $want (exit 1, no state created)"
+  else
+    t_fail "preflight failure: $want" "rc=$rc stderr=$err ws=$(ls -A "$w")"
+  fi
+}
+seam_fail "GNU timeout (coreutils) is required" "$tmp/ws15a" \
+  CLAUDE_BIN="$tmp/bin/claude" TIMEOUT_BIN= bash "$ROOT/pixel-autodev.sh" --workspace="$tmp/ws15a"
+seam_fail "git not installed in devbox" "$tmp/ws15b" \
+  CLAUDE_BIN="$tmp/bin/claude" GIT_BIN= bash "$ROOT/pixel-autodev.sh" --workspace="$tmp/ws15b"
+seam_fail "'claude' not found" "$tmp/ws15c" \
+  CLAUDE_BIN= bash "$ROOT/pixel-autodev.sh" --workspace="$tmp/ws15c"
+seam_fail "'codex' not found" "$tmp/ws15d" \
+  CODEX_BIN= bash "$ROOT/pixel-autodev.sh" --agent=codex --workspace="$tmp/ws15d"
+
+# 15e. CLI validation beats dependency resolution: usage error stays exit 2 even
+#      when every tool is "missing", and still creates nothing.
+mkdir -p "$tmp/ws15e"
+err="$(env TIMEOUT_BIN= GIT_BIN= CLAUDE_BIN= CODEX_BIN= bash "$ROOT/pixel-autodev.sh" --max-tasks=0 --workspace="$tmp/ws15e" 2>&1 >/dev/null)"; rc=$?
+if [ $rc -eq 2 ] && case "$err" in *"--max-tasks"*) true;; *) false;; esac && [ -z "$(ls -A "$tmp/ws15e")" ]; then
+  t_ok "usage error (exit 2) precedes dependency resolution"
+else
+  t_fail "validation ordering" "rc=$rc stderr=$err"
+fi
+
+# 15f. dry-run with BOTH agents "missing" still succeeds (skips resolution)
+out="$(env CLAUDE_BIN= CODEX_BIN= bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$tmp/ws15e" 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"dry-run: skipping agent resolution"*) true;; *) false;; esac; then
+  t_ok "dry-run requires no agent executable even via the seam"
+else
+  t_fail "dry-run seam" "rc=$rc"$'\n'"$out"
+fi
+
+# 15g. path override resolves an explicit executable (timeout via /bin/true)
+out="$(env TIMEOUT_BIN=/bin/true bash "$ROOT/pixel-autodev.sh" --dry-run --workspace="$tmp/ws15e" 2>&1)"; rc=$?
+if [ $rc -eq 0 ]; then t_ok "path override resolves (/bin/true as timeout)"; else t_fail "path override" "rc=$rc"$'\n'"$out"; fi
+
+# 15h. bare-name override resolves through PATH and dispatch stays on that stub
+printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/pixel-stub-agent"; chmod +x "$tmp/bin/pixel-stub-agent"
+ws15h="$tmp/ws15h"; mk_ws "$ws15h"
+printf -- '- [ ] Probe bare-name seam resolution\n' > "$ws15h/BACKLOG.md"
+git -C "$ws15h" add -A && git -C "$ws15h" commit -qm task >/dev/null
+out="$(env PATH="$APATH" CLAUDE_BIN=pixel-stub-agent bash "$ROOT/pixel-autodev.sh" --workspace="$ws15h" --max-tasks=1 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && case "$out" in *"agent: claude ("*"pixel-stub-agent)"*) true;; *) false;; esac; then
+  t_ok "bare-name override resolves through PATH; dispatch runs the stub"
+else
+  t_fail "bare-name override" "rc=$rc"$'\n'"$out"
+fi
+
+# 15i. a metacharacter override value is never executed
+pwn="$tmp/pwned-seam"; rm -f "$pwn"
+env CLAUDE_BIN='$(touch '"$pwn"')' bash "$ROOT/pixel-autodev.sh" --workspace="$tmp/ws15e" >/dev/null 2>&1; rc=$?
+if [ $rc -eq 1 ] && [ ! -e "$pwn" ]; then
+  t_ok "metacharacter seam value is never executed (quoted throughout)"
+else
+  t_fail "seam injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"
+fi
+
+# --- 16. bootstrap checksum manifest lockstep (audit R1) --------------------------
+MANIFEST="config/bootstrap-checksums.txt"
+manifest_sha(){ awk -v n="$1" '$1 ~ /^[0-9a-fA-F]{64}$/ && $2 == n {print tolower($1); f=1} END{exit !f}' "$MANIFEST" 2>/dev/null; }
+embedded_sha(){ grep -A1 -- "$1)" "$ROOT/pixel-bootstrap.sh" | grep -oE '[0-9a-f]{64}' | head -1; }
+file_sha(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | awk '{print $1}'; }
+
+if [ -f "$MANIFEST" ] && manifest_sha pixel-dev-setup.sh >/dev/null \
+   && manifest_sha pixel-apps-setup.sh >/dev/null && manifest_sha pixel-bootstrap.sh >/dev/null; then
+  t_ok "checksum manifest exists and covers all three pinned artifacts"
+else
+  t_fail "checksum manifest must pin all three artifacts (dev-setup, apps-setup, bootstrap)"
+fi
+for s in pixel-dev-setup.sh pixel-apps-setup.sh; do
+  if [ "$(manifest_sha "$s")" = "$(file_sha "$ROOT/$s")" ]; then
+    t_ok "manifest pin matches repo content: $s (lockstep)"
+  else
+    t_fail "manifest out of sync with $s" "manifest=$(manifest_sha "$s") file=$(file_sha "$ROOT/$s")"
+  fi
+  if [ "$(embedded_sha "$s")" = "$(manifest_sha "$s")" ]; then
+    t_ok "embedded digest matches manifest: $s"
+  else
+    t_fail "embedded digest out of sync: $s" "embedded=$(embedded_sha "$s") manifest=$(manifest_sha "$s")"
+  fi
+done
+# The anchor is pinned too, but carries no embedded copy of its own digest —
+# a script cannot hash itself. Two-way check only.
+if [ "$(manifest_sha pixel-bootstrap.sh)" = "$(file_sha "$ROOT/pixel-bootstrap.sh")" ]; then
+  t_ok "manifest pin matches repo content: pixel-bootstrap.sh (anchor lockstep)"
+else
+  t_fail "manifest out of sync with pixel-bootstrap.sh" "manifest=$(manifest_sha pixel-bootstrap.sh) file=$(file_sha "$ROOT/pixel-bootstrap.sh")"
+fi
+# The R1-scoped downloads never pipe remote content into a shell. The only
+# piped installer left in the file is the chartered claude.ai updater inside
+# the quoted 5-Update-AI shortcut body (audit F8 — out of scope here).
+pipes="$(grep -cE 'curl[^#]*\|[[:space:]]*(bash|sh)\b' "$ROOT/pixel-bootstrap.sh")"
+if [ "$pipes" -eq 1 ] && grep -E 'curl[^#]*\|[[:space:]]*(bash|sh)\b' "$ROOT/pixel-bootstrap.sh" | grep -q 'claude.ai/install.sh'; then
+  t_ok "no unverified curl|bash in bootstrap downloads (only chartered updater shortcut remains)"
+else
+  t_fail "unexpected curl|bash in pixel-bootstrap.sh" "matches: $pipes"
+fi
+n="$(grep -c 'curl -fsSL -o "\$DLTMP/\$s" "\$REPO_BASE/\$s"' "$ROOT/pixel-bootstrap.sh")"
+d="$(grep -c 'curl -fsSL -o "\$DEST/' "$ROOT/pixel-bootstrap.sh" || true)"
+if [ "$n" -eq 1 ] && [ "$d" -eq 0 ]; then
+  t_ok "downloads land in a temp file, never directly in \$DEST"
+else
+  t_fail "download-to-temp wiring" "temp=$n direct=$d"
+fi
+
+# --- 17. bootstrap download verification, functional (audit R1) --------------------
+# Hermetic "web root": curl's file:// scheme, no network. The Termux preflight
+# is satisfied by the pkg stub + PREFIX; each case gets a fresh HOME (with a
+# space) and runs from a neutral cwd so the download path is forced.
+dlroot="$tmp/dlroot"; mkdir -p "$dlroot/valid" "$dlroot/corrupt"
+cp "$ROOT/pixel-dev-setup.sh" "$ROOT/pixel-apps-setup.sh" "$dlroot/valid/"
+cp "$ROOT/pixel-dev-setup.sh" "$ROOT/pixel-apps-setup.sh" "$dlroot/corrupt/"
+printf 'tampered\n' >> "$dlroot/corrupt/pixel-dev-setup.sh"
+dlurl(){ printf 'file://%s' "${1// /%20}"; }   # percent-encode the space in $tmp
+BOOT_DEST=; BOOT_SHORT=
+run_boot(){ # env-assignments… then: bash "$ROOT/pixel-bootstrap.sh" args…
+  local h; h="$(mktemp -d "${tmp}/boot home.XXXXXX")"
+  BOOT_DEST="$h/.local/share/pixel"; BOOT_SHORT="$h/.shortcuts"
+  out="$(cd "$tmp" && env HOME="$h" PREFIX="$h/prefix" PATH="$APATH" "$@" 2>&1)"; rc=$?
+}
+dl_leftovers(){ ls -d /tmp/pixel-dl.* 2>/dev/null | wc -l; }
+
+# 17a. valid content verifies against the EMBEDDED digests (production path) and
+#      gets installed; shortcuts then get created.
+run_boot bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")"
+if [ $rc -eq 0 ] && case "$out" in *"pixel-dev-setup.sh (downloaded, sha256 verified)"*"pixel-apps-setup.sh (downloaded, sha256 verified)"*) true;; *) false;; esac \
+   && [ -f "$BOOT_DEST/pixel-dev-setup.sh" ] && [ -f "$BOOT_DEST/pixel-apps-setup.sh" ]; then
+  t_ok "valid downloads verify (sha256) and install"
+else
+  t_fail "valid download path" "rc=$rc"$'\n'"$out"
+fi
+if [ -f "$BOOT_SHORT/3-Apps-Setup" ]; then
+  t_ok "shortcuts created only after verified installs"
+else
+  t_fail "shortcuts missing after verified install"
+fi
+
+# 17b. mismatched content fails closed BEFORE install — nothing in DEST, no
+#      shortcut files, no temp leftovers.
+run_boot bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/corrupt")"
+if [ $rc -eq 1 ] && case "$out" in *"checksum mismatch for pixel-dev-setup.sh"*) true;; *) false;; esac \
+   && [ ! -e "$BOOT_DEST/pixel-dev-setup.sh" ] && [ "$(find "$BOOT_SHORT" -type f 2>/dev/null | wc -l)" -eq 0 ] \
+   && [ "$(dl_leftovers)" -eq 0 ]; then
+  t_ok "checksum mismatch fails closed (no install, no shortcuts, no temp)"
+else
+  t_fail "mismatch path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17c. failed download: die clearly, no partial file in DEST, temp cleaned.
+run_boot bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/nonexistent")"
+if [ $rc -eq 1 ] && case "$out" in *"could not download pixel-dev-setup.sh"*) true;; *) false;; esac \
+   && [ -z "$(ls -A "$BOOT_DEST" 2>/dev/null)" ] && [ "$(dl_leftovers)" -eq 0 ]; then
+  t_ok "failed download installs no partial content (temp cleaned)"
+else
+  t_fail "download-failure path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17d. missing checksum entry fails closed via the seam manifest (dev-setup is
+#      pinned there, apps-setup is not → run stops at apps-setup).
+printf '%s  pixel-dev-setup.sh\n' "$(file_sha "$ROOT/pixel-dev-setup.sh")" > "$tmp/manifest-missing.txt"
+run_boot env PIXEL_BOOTSTRAP_CHECKSUM_FILE="$tmp/manifest-missing.txt" \
+  bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")"
+if [ $rc -eq 1 ] && case "$out" in *"no pinned checksum for pixel-apps-setup.sh"*) true;; *) false;; esac \
+   && [ ! -e "$BOOT_DEST/pixel-apps-setup.sh" ]; then
+  t_ok "missing checksum entry fails closed (apps-setup not installed)"
+else
+  t_fail "missing-entry path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17e. metacharacters in the repo-base URL reach curl only as a quoted argument.
+pwn="$tmp/pwned-dl"; rm -f "$pwn"
+run_boot bash "$ROOT/pixel-bootstrap.sh" "--repo-base=file:///tmp/nope;\$(touch $pwn)"
+if [ $rc -eq 1 ] && [ ! -e "$pwn" ]; then
+  t_ok "metacharacter repo-base value is never executed"
+else
+  t_fail "repo-base injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"
+fi
+
+# 17f. copy-from-search-dir failure fails closed (session 8, D1): the DEST
+#      entry is an unresolvable symlink loop, so cp cannot succeed — die must
+#      name both paths and no shortcut files may be created.
+h17f="$(mktemp -d "${tmp}/boot home.XXXXXX")"
+mkdir -p "$h17f/.local/share/pixel"
+ln -s pixel-dev-setup.sh "$h17f/.local/share/pixel/pixel-dev-setup.sh"
+cp "$ROOT/pixel-dev-setup.sh" "$h17f/pixel-dev-setup.sh"
+out="$(cd "$tmp" && env HOME="$h17f" PREFIX="$h17f/prefix" PATH="$APATH" bash "$ROOT/pixel-bootstrap.sh" 2>&1)"; rc=$?
+if [ $rc -eq 1 ] && case "$out" in *"could not copy"*"pixel-dev-setup.sh"*) true;; *) false;; esac \
+   && [ "$(find "$h17f/.shortcuts" -type f 2>/dev/null | wc -l)" -eq 0 ]; then
+  t_ok "copy failure fails closed, names both paths (no shortcuts)"
+else
+  t_fail "copy-failure path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17g/h. --open-store opener diagnostics (session 8, D2). Restricted PATH keeps
+#        the pkg stub + coreutils but hides termux-open-url/am (curl symlinked
+#        in, so the fixture does not depend on the host's curl location).
+ln -sf "$(command -v curl)" "$tmp/bin/curl"
+OPATH="$tmp/bin:/usr/bin:/bin"
+run_boot_op(){ # like run_boot, but with the opener-free PATH
+  local h; h="$(mktemp -d "${tmp}/boot home.XXXXXX")"
+  BOOT_DEST="$h/.local/share/pixel"; BOOT_SHORT="$h/.shortcuts"
+  out="$(cd "$tmp" && env HOME="$h" PREFIX="$h/prefix" PATH="$OPATH" "$@" 2>&1)"; rc=$?
+}
+
+# 17g. no opener available: warn names the manual path, run still completes.
+run_boot_op bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")" --open-store
+if [ $rc -eq 0 ] && case "$out" in *"no URL opener"*"com.termux.widget"*) true;; *) false;; esac; then
+  t_ok "--open-store without opener warns with manual path (exit 0)"
+else
+  t_fail "opener-fallback path" "rc=$rc"$'\n'"$out"
+fi
+
+# 17h. opener present (stub): success prints from inside the opener branch and
+#      the no-opener warning does not appear.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/termux-open-url"
+chmod +x "$tmp/bin/termux-open-url"
+run_boot_op bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")" --open-store
+if [ $rc -eq 0 ] && case "$out" in *"Opened Termux:Widget on F-Droid"*) true;; *) false;; esac \
+   && case "$out" in *"no URL opener"*) false;; *) true;; esac; then
+  t_ok "--open-store with opener prints success from the opener branch"
+else
+  t_fail "opener-success path" "rc=$rc"$'\n'"$out"
+fi
+
+# --- 18. bootstrap anchor install-flow contract (README §1) ---------------------
+# The primary documented install path must be fetch→verify→run from an
+# immutable commit URL, with a digest that really is the digest of the pinned
+# git object, and no pipe-to-shell anywhere in the primary block.
+readme_block="$(awk '/^## 1\./{f=1} f&&/^```bash/{c=1;next} c&&/^```/{exit} c{print}' "$ROOT/README.md")"
+pin_commit="$(printf '%s\n' "$readme_block" | grep -oE 'raw\.githubusercontent\.com/B0LK13/pixel-development/[0-9a-f]{40}/pixel-bootstrap\.sh' | head -1 | grep -oE '[0-9a-f]{40}')"
+pin_digest="$(printf '%s\n' "$readme_block" | grep -oE '[0-9a-f]{64}' | head -1)"
+blob_sha(){ git -C "$ROOT" show "$1:pixel-bootstrap.sh" 2>/dev/null | (sha256sum 2>/dev/null || shasum -a 256) | awk '{print $1}'; }
+[ "${#pin_commit}" -eq 40 ] || pin_commit=
+[ "${#pin_digest}" -eq 64 ] || pin_digest=
+if [ -n "$pin_commit" ] && [ -n "$pin_digest" ]; then
+  t_ok "README §1 pins a full-commit URL and a SHA-256"
+else
+  t_fail "README §1 pin shape" "commit=$pin_commit digest=$pin_digest"
+fi
+if [ -n "$pin_commit" ] && [ "$(blob_sha "$pin_commit")" = "$pin_digest" ]; then
+  t_ok "README pin digest == sha256 of the pinned git object"
+else
+  t_fail "README pin does not match the pinned commit" "blob=$(blob_sha "$pin_commit") readme=$pin_digest"
+fi
+if printf '%s\n' "$readme_block" | grep -qE '\|[[:space:]]*(bash|sh)\b'; then
+  t_fail "README §1 primary block still pipes a download into a shell"
+else
+  t_ok "README §1 primary block has no pipe-to-shell"
+fi
+if printf '%s\n' "$readme_block" | grep -q "PIXEL_REPO_BASE=\"https://raw.githubusercontent.com/B0LK13/pixel-development/$pin_commit\""; then
+  t_ok "PIXEL_REPO_BASE pins the same immutable commit"
+else
+  t_fail "PIXEL_REPO_BASE does not pin the same commit as the download"
+fi
+
+# --- 19. signature verification fixtures (bootstrap trust model, tier 2) --------
+HELPER="$ROOT/scripts/verify-bootstrap-signature.sh"
+if command -v gpg >/dev/null 2>&1 && command -v gpgv >/dev/null 2>&1; then
+  GNUPGHOME="$tmp/gnupg"; export GNUPGHOME; mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
+  printf 'Key-Type: eddsa\nKey-Curve: ed25519\nKey-Usage: sign\nName-Real: Pixel Test\nName-Email: t@example.invalid\n%%no-protection\n%%commit\n' > "$tmp/keyparams"
+  gpg --batch --gen-key "$tmp/keyparams" >/dev/null 2>&1
+  printf 'genuine bootstrap artifact\n' > "$tmp/artifact"
+  gpg --batch --yes --local-user t@example.invalid --detach-sign --output "$tmp/artifact.sig" "$tmp/artifact" >/dev/null 2>&1
+  gpg --export t@example.invalid > "$tmp/trusted.pub" 2>/dev/null
+  # a second, untrusted key for the wrong-keyring case
+  printf 'Key-Type: eddsa\nKey-Curve: ed25519\nKey-Usage: sign\nName-Real: Other\nName-Email: o@example.invalid\n%%no-protection\n%%commit\n' > "$tmp/keyparams2"
+  gpg --batch --gen-key "$tmp/keyparams2" >/dev/null 2>&1
+  gpg --export o@example.invalid > "$tmp/untrusted.pub" 2>/dev/null
+
+  # 19a. a genuine signature verifies
+  out="$(bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact" 2>&1)"; rc=$?
+  if [ $rc -eq 0 ] && case "$out" in *"signature verified"*) true;; *) false;; esac; then
+    t_ok "valid detached signature verifies (gpgv)"
+  else t_fail "valid signature" "rc=$rc"$'\n'"$out"; fi
+
+  # 19b. a tampered artifact fails closed
+  cp "$tmp/artifact" "$tmp/artifact-tampered"; printf 'x\n' >> "$tmp/artifact-tampered"
+  err="$(bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact-tampered" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ] && case "$err" in *"FAILED"*) true;; *) false;; esac; then
+    t_ok "tampered artifact fails signature verification (exit 1)"
+  else t_fail "tampered artifact" "rc=$rc"$'\n'"$err"; fi
+
+  # 19c. the right signature under the wrong keyring fails
+  err="$(bash "$HELPER" --keyring="$tmp/untrusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ]; then t_ok "untrusted keyring rejects a genuine signature"; else t_fail "wrong keyring" "rc=$rc"$'\n'"$err"; fi
+
+  # 19d. missing signature file is a clear error
+  err="$(bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/nope.sig" "$tmp/artifact" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ] && case "$err" in *"signature not found"*) true;; *) false;; esac; then
+    t_ok "missing signature file is a clear error"
+  else t_fail "missing signature" "rc=$rc"$'\n'"$err"; fi
+
+  # 19e. missing verifier (seam set-empty) fails clearly
+  err="$(env GPGV_BIN= bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact" 2>&1 >/dev/null)"; rc=$?
+  if [ $rc -eq 1 ] && case "$err" in *gpgv*) true;; *) false;; esac; then
+    t_ok "missing gpgv fails with a named dependency (exit 1)"
+  else t_fail "missing verifier" "rc=$rc"$'\n'"$err"; fi
+
+  # 19f. usage errors exit 2 and precede dependency resolution
+  bash "$HELPER" >/dev/null 2>&1; rc=$?
+  [ $rc -eq 2 ] && t_ok "signature helper: no args is a usage error (exit 2)" || t_fail "helper usage" "rc=$rc"
+  bash "$HELPER" --bogus=1 >/dev/null 2>&1; rc=$?
+  [ $rc -eq 2 ] && t_ok "signature helper: unknown flag is a usage error (exit 2)" || t_fail "helper unknown flag" "rc=$rc"
+
+  # 19g. a metacharacter verifier value is never executed
+  pwn="$tmp/pwned-gpgv"; rm -f "$pwn"
+  env GPGV_BIN='$(touch '"$pwn"')' bash "$HELPER" --keyring="$tmp/trusted.pub" --signature="$tmp/artifact.sig" "$tmp/artifact" >/dev/null 2>&1; rc=$?
+  if [ $rc -eq 1 ] && [ ! -e "$pwn" ]; then
+    t_ok "metacharacter GPGV_BIN value is never executed"
+  else t_fail "gpgv seam injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"; fi
+else
+  t_skip "gpg/gpgv not installed — signature fixtures skipped (install gnupg to run)"
+fi
+
+# --- 20. checksum lifecycle tool (scripts/update-bootstrap-checksums.sh) ----------
+CKTOOL="$ROOT/scripts/update-bootstrap-checksums.sh"
+mk_fx(){ # $1 fixture dir — a mini repo root (scripts/ + config/ + 3 artifacts)
+  local d="$1"; mkdir -p "$d/scripts" "$d/config"
+  cp "$CKTOOL" "$d/scripts/"
+  cp "$ROOT/pixel-bootstrap.sh" "$ROOT/pixel-dev-setup.sh" "$ROOT/pixel-apps-setup.sh" "$d/"
+  cp "$ROOT/config/bootstrap-checksums.txt" "$d/config/"
+}
+fxrun(){ # $1 fixture  $2.. args → rc/out; runs from a neutral cwd (outside root)
+  local d="$1"; shift
+  out="$(cd "$tmp" && bash "$d/scripts/update-bootstrap-checksums.sh" "$@" 2>&1)"; rc=$?
+}
+ck_leftovers(){ ls "$1"/.embedded.* "$1"/config/.bootstrap-checksums.* 2>/dev/null | wc -l; }
+
+# 20a. current manifest passes; the fixture path contains a space (proves quoting)
+mk_fx "$tmp/fx a"; fxrun "$tmp/fx a" --check
+if [ $rc -eq 0 ] && case "$out" in *"is current"*) true;; *) false;; esac && case "$tmp/fx a" in *' '*) true;; *) false;; esac; then
+  t_ok "checksum tool: current manifest passes --check (path with spaces)"
+else t_fail "tool current" "rc=$rc"$'\n'"$out"; fi
+
+# 20b+c. stale manifest fails --check naming the artifact; --write repairs it
+mk_fx "$tmp/fx b"; printf 'tamper\n' >> "$tmp/fx b/pixel-apps-setup.sh"
+fxrun "$tmp/fx b" --check
+if [ $rc -eq 1 ] && case "$out" in *"STALE: pixel-apps-setup.sh"*) true;; *) false;; esac; then
+  t_ok "checksum tool: stale manifest fails --check naming the artifact"
+else t_fail "tool stale" "rc=$rc"$'\n'"$out"; fi
+fxrun "$tmp/fx b" --write; wrc=$rc
+fxrun "$tmp/fx b" --check
+if [ $wrc -eq 0 ] && [ $rc -eq 0 ] && [ "$(ck_leftovers "$tmp/fx b")" -eq 0 ]; then
+  t_ok "checksum tool: --write repairs stale manifest+embedded (no temp leftovers)"
+else t_fail "tool write" "write_rc=$wrc recheck_rc=$rc"; fi
+
+# 20d. missing artifact
+mk_fx "$tmp/fx d"; rm "$tmp/fx d/pixel-dev-setup.sh"; fxrun "$tmp/fx d" --check
+if [ $rc -eq 1 ] && case "$out" in *"missing artifact: pixel-dev-setup.sh"*) true;; *) false;; esac; then
+  t_ok "checksum tool: missing artifact fails clearly"
+else t_fail "tool missing artifact" "rc=$rc"$'\n'"$out"; fi
+
+# 20e/f/g. malformed / duplicate / unexpected manifest entries are rejected
+mk_fx "$tmp/fx e"; printf 'not a digest line\n' >> "$tmp/fx e/config/bootstrap-checksums.txt"
+fxrun "$tmp/fx e" --check
+[ $rc -eq 1 ] && case "$out" in *"malformed"*) true;; *) false;; esac \
+  && t_ok "checksum tool: malformed manifest line rejected" || t_fail "tool malformed" "rc=$rc"$'\n'"$out"
+mk_fx "$tmp/fx f"; printf '%s  pixel-apps-setup.sh\n' "$(file_sha "$ROOT/pixel-apps-setup.sh")" >> "$tmp/fx f/config/bootstrap-checksums.txt"
+fxrun "$tmp/fx f" --check
+[ $rc -eq 1 ] && case "$out" in *"duplicate"*) true;; *) false;; esac \
+  && t_ok "checksum tool: duplicate manifest entry rejected" || t_fail "tool duplicate" "rc=$rc"$'\n'"$out"
+mk_fx "$tmp/fx g"; printf '%s  evil.sh\n' "0000000000000000000000000000000000000000000000000000000000000000" >> "$tmp/fx g/config/bootstrap-checksums.txt"
+fxrun "$tmp/fx g" --check
+[ $rc -eq 1 ] && case "$out" in *"unexpected artifact: evil.sh"*) true;; *) false;; esac \
+  && t_ok "checksum tool: unexpected artifact name rejected" || t_fail "tool unexpected" "rc=$rc"$'\n'"$out"
+
+# 20h. deterministic ordering + idempotent write
+mk_fx "$tmp/fx h"; fxrun "$tmp/fx h" --write; fxrun "$tmp/fx h" --write
+order="$(grep -E '^[0-9a-f]{64}' "$tmp/fx h/config/bootstrap-checksums.txt" | awk '{print $2}' | tr '\n' ' ')"
+if [ $rc -eq 0 ] && case "$out" in *"already current"*) true;; *) false;; esac \
+   && [ "$order" = "pixel-apps-setup.sh pixel-bootstrap.sh pixel-dev-setup.sh " ]; then
+  t_ok "checksum tool: deterministic sorted order; second --write changes nothing"
+else t_fail "tool ordering" "rc=$rc order=$order"$'\n'"$out"; fi
+
+# 20i. symlink escape is refused
+mk_fx "$tmp/fx i"; rm "$tmp/fx i/pixel-apps-setup.sh"; ln -s /etc/passwd "$tmp/fx i/pixel-apps-setup.sh"
+fxrun "$tmp/fx i" --check
+if [ $rc -eq 1 ] && case "$out" in *"symlink"*) true;; *) false;; esac; then
+  t_ok "checksum tool: symlink artifact refused"
+else t_fail "tool symlink" "rc=$rc"$'\n'"$out"; fi
+
+# 20j. --check never mutates (even a stale manifest)
+mk_fx "$tmp/fx j"; printf 'tamper\n' >> "$tmp/fx j/pixel-dev-setup.sh"
+before="$(file_sha "$tmp/fx j/config/bootstrap-checksums.txt")"; fxrun "$tmp/fx j" --check
+after="$(file_sha "$tmp/fx j/config/bootstrap-checksums.txt")"
+if [ $rc -eq 1 ] && [ "$before" = "$after" ]; then
+  t_ok "checksum tool: --check is non-mutating on a stale manifest"
+else t_fail "tool check-mutate" "rc=$rc"; fi
+
+# 20k. interrupted write simulation: embedded pattern unmatchable → --write dies
+#      before touching the manifest; no partial state, no temp leftovers
+mk_fx "$tmp/fx k"; sed -i -E '/pixel-apps-setup\.sh\).*printf/d' "$tmp/fx k/pixel-bootstrap.sh"
+before="$(file_sha "$tmp/fx k/config/bootstrap-checksums.txt")"; fxrun "$tmp/fx k" --write
+after="$(file_sha "$tmp/fx k/config/bootstrap-checksums.txt")"
+if [ $rc -eq 1 ] && case "$out" in *"expected 1 line"*) true;; *) false;; esac \
+   && [ "$before" = "$after" ] && [ "$(ck_leftovers "$tmp/fx k")" -eq 0 ]; then
+  t_ok "checksum tool: failed --write leaves manifest byte-identical (no partial state)"
+else t_fail "tool interrupted write" "rc=$rc"$'\n'"$out"; fi
+
+# 20l. embedded/manifest mismatch is detected (single lockstep source of truth)
+mk_fx "$tmp/fx l"
+sed -i -E '/pixel-apps-setup\.sh\).*printf/ s/[0-9a-f]{64}/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/' "$tmp/fx l/pixel-bootstrap.sh"
+fxrun "$tmp/fx l" --check
+if [ $rc -eq 1 ] && case "$out" in *"EMBEDDED STALE: pixel-apps-setup.sh"*) true;; *) false;; esac; then
+  t_ok "checksum tool: embedded/manifest mismatch detected"
+else t_fail "tool embedded mismatch" "rc=$rc"$'\n'"$out"; fi
+
+# 20m. usage contract: unknown argument and conflicting modes exit 2
+bash "$CKTOOL" --bogus >/dev/null 2>&1; rc=$?
+[ $rc -eq 2 ] && t_ok "checksum tool: unknown argument is a usage error (exit 2)" || t_fail "tool usage" "rc=$rc"
+bash "$CKTOOL" --check --write >/dev/null 2>&1; rc=$?
+[ $rc -eq 2 ] && t_ok "checksum tool: --check --write conflict is a usage error (exit 2)" || t_fail "tool conflict" "rc=$rc"
+
+# 20n. clean-clone execution: the committed tool passes --check from a fresh clone
+ckclone="$tmp/ck clone"
+if git clone -q --local "$ROOT" "$ckclone" 2>/dev/null \
+   && ( cd / && bash "$ckclone/scripts/update-bootstrap-checksums.sh" --check >/dev/null 2>&1 ); then
+  t_ok "checksum tool: --check passes from a clean clone"
+else t_fail "tool clean-clone" "clone or check failed"; fi
+
+# --- 21. release-process governance (docs/BOOTSTRAP_RELEASE_PROCESS.md) -----------
+RELDOC="$ROOT/docs/BOOTSTRAP_RELEASE_PROCESS.md"
+rel_row="$(grep -E '^\|.*\| *current *\|' "$RELDOC" 2>/dev/null | head -1)"
+rel_commit="$(printf '%s' "$rel_row" | grep -oE '[0-9a-f]{40}' | head -1)"
+rel_digest="$(printf '%s' "$rel_row" | grep -oE '[0-9a-f]{64}' | head -1)"
+if [ -f "$RELDOC" ] && [ -n "$rel_commit" ] && [ -n "$rel_digest" ] \
+   && [ "$(blob_sha "$rel_commit")" = "$rel_digest" ]; then
+  t_ok "release doc: 'current' pin-history row matches the pinned git object"
+else
+  t_fail "release doc pin history" "commit=$rel_commit digest=$rel_digest blob=$(blob_sha "$rel_commit")"
+fi
+if grep -q 'Rollback procedure' "$RELDOC" && grep -q 'operator-owned' "$RELDOC"; then
+  t_ok "release doc: rollback path + operator-owned publishing documented"
+else
+  t_fail "release doc missing rollback/ownership sections"
+fi
+
+# --- 22. CI parity (workflow vs scripts/ci-local.sh, static) ----------------------
+# Guards against silent drift between GitHub Actions and the local parity
+# command. The essential gate commands must exist in BOTH places.
+WF="$ROOT/.github/workflows/test.yml"
+CIL="$ROOT/scripts/ci-local.sh"
+if ! grep -q "$(printf '\t')" "$WF" && grep -q 'contents: read' "$WF"; then
+  t_ok "workflow: valid-YAML hygiene (no tabs), least-privilege permissions"
+else t_fail "workflow hygiene" "tabs or permissions regressed"; fi
+for gate in 'git diff --check' 'bash scripts/update-bootstrap-checksums.sh --check' 'bash tests/run_tests.sh'; do
+  if grep -qF "run: $gate" "$WF" && grep -qF "$gate" "$CIL"; then
+    t_ok "CI parity: gate in workflow AND ci-local.sh: $gate"
+  else
+    t_fail "CI parity drift" "$gate missing in workflow or ci-local.sh"
+  fi
+done
+if grep -qF "branches: [main, 'auto/*']" "$WF"; then
+  t_ok "workflow triggers cover main + auto/* integration branches"
+else t_fail "workflow triggers" "branch pattern changed"; fi
+# Every checkout must fetch full history: the anchor-pin tests (§18/§28) and
+# the clean-clone smoke (§8) need pinned-commit objects and ancestry, which a
+# default depth-1 checkout lacks (session 9: all three failures on the first
+# remote run traced to this).
+if [ "$(grep -c 'actions/checkout@v4' "$WF")" -ge 1 ] \
+   && [ "$(grep -c 'actions/checkout@v4' "$WF")" -eq "$(grep -c 'fetch-depth: 0' "$WF")" ]; then
+  t_ok "workflow checkouts fetch full history (fetch-depth: 0)"
+else t_fail "workflow checkout depth" "checkout steps without fetch-depth: 0"; fi
+if grep -qE '\$\{\{ *secrets\.' "$WF" || grep -qE '\b(claude|codex)( |$)' "$WF"; then
+  t_fail "workflow references a paid agent or a secret"
+else
+  t_ok "workflow invokes no paid agent and uses no secret context"
+fi
+# ci-local.sh itself: fail-fast, no mutation, runnable from anywhere (static shape)
+if grep -q 'exit "$2"' "$CIL" && grep -q 'cd "$ROOT"' "$CIL"; then
+  t_ok "ci-local.sh preserves failing step exit status and cds to repo root"
+else t_fail "ci-local.sh shape" "fail-fast/root handling regressed"; fi
+
+# release-candidate-check job: fixture build + both verify paths +
+# reproducibility, bounded, publishing nothing; every release mechanism it
+# uses must also be covered by the hermetic harness (ci-local gate 5).
+if grep -q '^  release-candidate-check:' "$WF" && grep -q 'timeout-minutes: 5' "$WF"; then
+  t_ok "workflow: release-candidate-check job exists with a bounded timeout"
+else t_fail "workflow release job" "missing or unbounded"; fi
+for mech in 'SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh' 'bash scripts/verify-release-bundle.sh' '--require-signature' 'diff -r'; do
+  if grep -qF -- "$mech" "$WF"; then
+    t_ok "workflow release job exercises: $mech"
+  else t_fail "workflow release job" "missing: $mech"; fi
+done
+# the release tools are equals-only (harness §7/§12: space-form exits 2), so a
+# space-form invocation in the workflow would fail on the first remote run —
+# pin equals-form for every value-taking release flag
+if grep -qE -- '--(version|output-dir|bundle|signature|keyring) ' "$WF"; then
+  t_fail "workflow release job" "space-form release flag (equals-only tools)"
+else
+  t_ok "workflow release job uses equals-form flags (release tools are equals-only)"
+fi
+if grep -qF 'scripts/build-release-candidate.sh' "$ROOT/tests/run_tests.sh" \
+   && grep -qF 'scripts/verify-release-bundle.sh' "$ROOT/tests/run_tests.sh"; then
+  t_ok "CI parity: release mechanisms also covered by the hermetic suite (ci-local gate 5)"
+else t_fail "CI parity release" "harness lost release coverage"; fi
+if grep -qiE 'gh release|git push|create-release|action-gh-release' "$WF"; then
+  t_fail "workflow publishes or pushes" "release/push step found"
+else
+  t_ok "workflow release job publishes nothing and pushes nothing"
+fi
+
+# --- 23. session-5 security invariants (bootstrap trust + lifecycle) --------------
+# 23a. SIGTERM mid-download exits through the EXIT trap, so the temp dir is
+#      removed (invariant 9). A stub curl sleeps; only the bootstrap PID is
+#      signalled — bash runs the pending trap when the child exits, and the
+#      EXIT trap cleans up. No process-group signalling (fragile under job
+#      control), so this is deterministic everywhere.
+mkdir -p "$tmp/slowbin"
+printf '#!/usr/bin/env bash\nsleep 3\n' > "$tmp/slowbin/curl"; chmod +x "$tmp/slowbin/curl"
+sigh="$(mktemp -d "${tmp}/sig home.XXXXXX")"
+env HOME="$sigh" PREFIX="$sigh/prefix" PATH="$tmp/slowbin:$APATH" \
+  bash "$ROOT/pixel-bootstrap.sh" --repo-base="file:///tmp/none" >/dev/null 2>&1 &
+sigpid=$!
+sleep 1
+kill -TERM $sigpid 2>/dev/null
+sigok=0
+for _ in $(seq 1 40); do
+  if ! kill -0 $sigpid 2>/dev/null && [ "$(dl_leftovers)" -eq 0 ]; then sigok=1; break; fi
+  sleep 0.25
+done
+kill -KILL $sigpid 2>/dev/null || true
+if [ "$sigok" = 1 ]; then
+  t_ok "SIGTERM mid-download: bootstrap exits and temp download dir is cleaned"
+else
+  t_fail "signal cleanup" "process/temp survived SIGTERM"
+fi
+# static half: both signal traps route through exit (which runs the EXIT trap)
+if [ "$(grep -cE "trap 'exit 1(30|43)' (INT|TERM)" "$ROOT/pixel-bootstrap.sh")" -eq 2 ]; then
+  t_ok "INT/TERM traps route through the EXIT trap (cleanup on signals)"
+else
+  t_fail "signal traps" "expected INT+TERM traps in pixel-bootstrap.sh"
+fi
+
+# 23b. installed setup scripts are executable and not overly permissive (inv. 10)
+run_boot bash "$ROOT/pixel-bootstrap.sh" --repo-base="$(dlurl "$dlroot/valid")"
+perm="$(stat -c %a "$BOOT_DEST/pixel-dev-setup.sh" 2>/dev/null)"
+perm2="$(stat -c %a "$BOOT_DEST/pixel-apps-setup.sh" 2>/dev/null)"
+if [ $rc -eq 0 ] && [ -x "$BOOT_DEST/pixel-dev-setup.sh" ] && [ -x "$BOOT_DEST/pixel-apps-setup.sh" ] \
+   && [ "$perm" -le 755 ] && [ "$perm2" -le 755 ]; then
+  t_ok "installed scripts are executable with deliberate permissions ($perm/$perm2)"
+else
+  t_fail "installed permissions" "rc=$rc perm=$perm/$perm2"
+fi
+
+# 23c. redirects cannot bypass verification: the digest is computed AFTER the
+#      download returns, so a redirect to wrong content fails closed like any
+#      other mismatch (proven functionally by 17b; this pins the code order).
+curl_ln="$(grep -n 'curl -fsSL -o "\$DLTMP/\$s"' "$ROOT/pixel-bootstrap.sh" | cut -d: -f1)"
+ver_ln="$(grep -n 'sha256_of "\$DLTMP/\$s"' "$ROOT/pixel-bootstrap.sh" | cut -d: -f1)"
+if [ -n "$curl_ln" ] && [ -n "$ver_ln" ] && [ "$ver_ln" -gt "$curl_ln" ]; then
+  t_ok "download-then-verify order pinned (redirect-safe by construction)"
+else
+  t_fail "verify order" "curl=$curl_ln verify=$ver_ln"
+fi
+
+# 23d. the shipped state passes its own CI checksum gate (invariant 14, local half)
+if bash "$ROOT/scripts/update-bootstrap-checksums.sh" --check >/dev/null 2>&1; then
+  t_ok "shipped manifest passes its own checksum gate"
+else
+  t_fail "checksum gate self-check" "manifest stale in the shipped tree"
+fi
+
+# --- 24. release candidate builder (scripts/build-release-candidate.sh) --------
+# Hermetic fixtures: throwaway clones of this repo with the current builder
+# copied in and fixture-committed (the builder requires a clean tree).
+mk_rc_clone(){ # $1 = destination clone dir
+  local dst="$1"
+  git clone -q "$ROOT" "$dst" 2>/dev/null || return 1
+  cp "$ROOT/scripts/build-release-candidate.sh" "$dst/scripts/" || return 1
+  git -C "$dst" config user.name t; git -C "$dst" config user.email t@t
+  # fixtures never sign: the host's global commit.gpgsign must not leak in
+  git -C "$dst" config commit.gpgsign false
+  git -C "$dst" add -A || return 1
+  # commit only if the copy changed the tree: when the builder is already
+  # committed upstream the clone is identical and there is nothing to commit
+  if ! git -C "$dst" diff --cached --quiet; then
+    git -C "$dst" commit -qm fixture >/dev/null || return 1
+  fi
+  # the fixture must end up clean — the builder's clean-tree gate depends on it
+  [ -z "$(git -C "$dst" status --porcelain)" ]
+}
+rcrun(){ # $1 = clone dir; rest = builder args → sets rc + rcout (no pipe)
+  local d="$1"; shift
+  rcout="$(bash "$d/scripts/build-release-candidate.sh" "$@" 2>&1)"; rc=$?
+}
+
+rcroot="$tmp/rc"; mkdir -p "$rcroot"
+if mk_rc_clone "$rcroot/repo"; then
+  # 24a. happy path: exact 9-file layout
+  rcrun "$rcroot/repo" --version=1.0.0 --output-dir="$rcroot/out"
+  b="$rcroot/out/pixel-development-1.0.0"
+  want="./INSTALL.md ./RELEASE-METADATA.json ./SHA256SUMS ./SIGNING-MANIFEST.json ./VERIFY.md ./bootstrap-checksums.txt ./pixel-apps-setup.sh ./pixel-bootstrap.sh ./pixel-dev-setup.sh "
+  if [ "$rc" -eq 0 ] && got="$(cd "$b" && find . -type f | sort | tr '\n' ' ')" && [ "$got" = "$want" ]; then
+    t_ok "rc build: exact 9-file bundle layout"
+  else
+    t_fail "rc layout" "rc=$rc got: ${got:-none} -- $rcout"
+  fi
+
+  # 24b. deliberate modes: 0755 scripts, 0644 data/docs
+  if [ "$rc" -eq 0 ] \
+     && [ "$(stat -c %a "$b/pixel-bootstrap.sh")" = 755 ] \
+     && [ "$(stat -c %a "$b/pixel-apps-setup.sh")" = 755 ] \
+     && [ "$(stat -c %a "$b/bootstrap-checksums.txt")" = 644 ] \
+     && [ "$(stat -c %a "$b/RELEASE-METADATA.json")" = 644 ]; then
+    t_ok "rc build: deliberate modes (755 scripts / 644 data)"
+  else
+    t_fail "rc modes" "rc=$rc"
+  fi
+
+  # 24c. RELEASE-METADATA.json schema fields
+  meta="$b/RELEASE-METADATA.json"
+  if [ "$rc" -eq 0 ] \
+     && grep -q '^  "schema_version": "1.0",$' "$meta" \
+     && grep -q '^  "project": "pixel-development",$' "$meta" \
+     && grep -q '^  "version": "1.0.0",$' "$meta" \
+     && grep -qE '^  "commit": "[0-9a-f]{40}",$' "$meta" \
+     && grep -qE '^  "created_at": "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",$' "$meta" \
+     && grep -q '^  "bootstrap_entrypoint": "pixel-bootstrap.sh",$' "$meta" \
+     && grep -q '^  "checksum_algorithm": "sha256",$' "$meta" \
+     && grep -q '^  "signature_algorithm": "openpgp-detached",$' "$meta" \
+     && grep -q '^  "signature_required": false,$' "$meta"; then
+    t_ok "rc metadata: schema fields valid (semver, full commit, sha256, openpgp-detached)"
+  else
+    t_fail "rc metadata schema" "see $meta"
+  fi
+
+  # 24d. artifacts array: sorted, digests match files, modes/roles consistent
+  if [ "$rc" -eq 0 ]; then
+    order="$(grep -oE '"path": "[^"]+"' "$meta" | sed 's/"path": "//;s/"$//' | tr '\n' ' ')"
+    okdig=1
+    for p in bootstrap-checksums.txt pixel-apps-setup.sh pixel-bootstrap.sh pixel-dev-setup.sh; do
+      line="$(grep -F "\"path\": \"$p\"" "$meta")"
+      dig="$(printf '%s' "$line" | grep -oE '[0-9a-f]{64}')"
+      [ "$dig" = "$(sha256sum "$b/$p" | awk '{print $1}')" ] || okdig=0
+    done
+    bm="$(grep -F '"path": "pixel-bootstrap.sh"' "$meta" | grep -oE '"mode": "[0-9]+"' | grep -oE '[0-9]+')"
+    br="$(grep -F '"path": "pixel-bootstrap.sh"' "$meta" | grep -oE '"role": "[a-z-]+"' | sed 's/.*: "//;s/"//')"
+    if [ "$order" = "bootstrap-checksums.txt pixel-apps-setup.sh pixel-bootstrap.sh pixel-dev-setup.sh " ] \
+       && [ "$okdig" = 1 ] && [ "$bm" = 0755 ] && [ "$br" = bootstrap ]; then
+      t_ok "rc metadata: artifacts sorted, digests match files, mode/role consistent"
+    else
+      t_fail "rc metadata artifacts" "order=$order okdig=$okdig mode=$bm role=$br"
+    fi
+  else
+    t_fail "rc metadata artifacts" "build failed"
+  fi
+
+  # 24e. SIGNING-MANIFEST.json binds metadata digest + artifact hashes
+  sman="$b/SIGNING-MANIFEST.json"
+  if [ "$rc" -eq 0 ]; then
+    md="$(grep -E '^  "release_metadata_sha256": "[0-9a-f]{64}",$' "$sman" | grep -oE '[0-9a-f]{64}')"
+    okbind=1
+    [ "$md" = "$(sha256sum "$meta" | awk '{print $1}')" ] || okbind=0
+    for p in bootstrap-checksums.txt pixel-apps-setup.sh pixel-bootstrap.sh pixel-dev-setup.sh; do
+      dig="$(grep -F "\"path\": \"$p\"" "$sman" | grep -oE '[0-9a-f]{64}')"
+      [ "$dig" = "$(sha256sum "$b/$p" | awk '{print $1}')" ] || okbind=0
+    done
+    if [ "$okbind" = 1 ] \
+       && grep -q '^  "schema_version": "1.0",$' "$sman" \
+       && grep -q '^  "signature_algorithm": "openpgp-detached",$' "$sman" \
+       && grep -q '^  "expected_signature": "SIGNING-MANIFEST.json.asc",$' "$sman" \
+       && grep -qE '^  "commit": "[0-9a-f]{40}",$' "$sman" \
+       && grep -q '^  "version": "1.0.0",$' "$sman"; then
+      t_ok "rc signing manifest: binds commit+version+metadata digest+artifact hashes"
+    else
+      t_fail "rc signing manifest" "okbind=$okbind"
+    fi
+  else
+    t_fail "rc signing manifest" "build failed"
+  fi
+
+  # 24f. SHA256SUMS verifies with sha256sum -c
+  if [ "$rc" -eq 0 ] && (cd "$b" && sha256sum -c SHA256SUMS >/dev/null 2>&1); then
+    t_ok "rc SHA256SUMS verifies against bundle files"
+  else
+    t_fail "rc SHA256SUMS" "rc=$rc"
+  fi
+
+  # 24g. INSTALL.md: immutable commit URL + pinned digest, no pipe-to-shell
+  im="$b/INSTALL.md"
+  if [ "$rc" -eq 0 ] \
+     && grep -q "raw.githubusercontent.com/B0LK13/pixel-development/[0-9a-f]\{40\}/pixel-bootstrap.sh" "$im" \
+     && grep -q "$(sha256sum "$b/pixel-bootstrap.sh" | awk '{print $1}')" "$im" \
+     && grep -q "PIXEL_REPO_BASE=\"https://raw.githubusercontent.com/B0LK13/pixel-development/[0-9a-f]\{40\}\"" "$im" \
+     && ! grep -qE '\|[[:space:]]*(bash|sh)\b' "$im"; then
+    t_ok "rc INSTALL.md: commit-pinned verified flow, digest matches, no pipe-to-shell"
+  else
+    t_fail "rc INSTALL.md" "rc=$rc"
+  fi
+
+  # 24h. VERIFY.md: integrity-only labelled as non-authentic + signed path shown
+  vm="$b/VERIFY.md"
+  if [ "$rc" -eq 0 ] \
+     && grep -q 'verified-integrity-only' "$vm" \
+     && grep -q 'verified-signed' "$vm" \
+     && grep -q -- '--require-signature' "$vm" \
+     && grep -qi 'NOT authorship' "$vm"; then
+    t_ok "rc VERIFY.md: integrity-only labelled, signed path + policy shown"
+  else
+    t_fail "rc VERIFY.md" "rc=$rc"
+  fi
+
+  # 24i. malformed versions are usage errors (exit 2), before any side effect
+  for v in "1.0" "abc" "1.0.0.0" "" "1.0.x" "v1.0.0"; do
+    rcrun "$rcroot/repo" --version="$v" --output-dir="$rcroot/out-$v"
+    if [ "$rc" -eq 2 ] && [ ! -e "$rcroot/out-$v" ]; then
+      t_ok "rc usage: malformed version '$v' exits 2 with no output"
+    else
+      t_fail "rc version '$v'" "rc=$rc out=$rcout"
+    fi
+  done
+
+  # 24j/24k. missing --version / unknown flag → exit 2
+  rcrun "$rcroot/repo" --output-dir="$rcroot/out-nov"
+  [ "$rc" -eq 2 ] && t_ok "rc usage: missing --version exits 2" || t_fail "rc missing version" "rc=$rc"
+  rcrun "$rcroot/repo" --version=1.0.0 --frobnicate
+  [ "$rc" -eq 2 ] && t_ok "rc usage: unknown flag exits 2" || t_fail "rc unknown flag" "rc=$rc"
+
+  # 24l. dirty tree → exit 1, no bundle, no temp leftovers
+  if mk_rc_clone "$rcroot/dirty"; then
+    echo wip > "$rcroot/dirty/SCRATCH.txt"
+    rcrun "$rcroot/dirty" --version=9.9.9 --output-dir="$rcroot/out-dirty"
+    leftovers="$(find "$rcroot" -maxdepth 3 -name '.pixel-development-*.tmp.*' 2>/dev/null)"
+    if [ "$rc" -eq 1 ] && [ ! -e "$rcroot/out-dirty" ] && [ -z "$leftovers" ]; then
+      t_ok "rc: dirty tree rejected (exit 1, no bundle, no temp leftovers)"
+    else
+      t_fail "rc dirty tree" "rc=$rc $rcout"
+    fi
+  else
+    t_fail "rc dirty tree" "clone failed"
+  fi
+
+  # 24m. stale checksum manifest → exit 1 atomically
+  if mk_rc_clone "$rcroot/stale"; then
+    printf '# drift\n' >> "$rcroot/stale/pixel-dev-setup.sh"
+    git -C "$rcroot/stale" commit -qam drift >/dev/null
+    rcrun "$rcroot/stale" --version=9.9.9 --output-dir="$rcroot/out-stale"
+    if [ "$rc" -eq 1 ] && [ ! -e "$rcroot/out-stale" ] && printf '%s' "$rcout" | grep -qi 'lockstep'; then
+      t_ok "rc: stale checksum manifest rejected atomically (exit 1, no bundle)"
+    else
+      t_fail "rc stale manifest" "rc=$rc $rcout"
+    fi
+  else
+    t_fail "rc stale manifest" "clone failed"
+  fi
+
+  # 24n. missing artifact → exit 1
+  if mk_rc_clone "$rcroot/missing"; then
+    git -C "$rcroot/missing" rm -q pixel-apps-setup.sh >/dev/null
+    git -C "$rcroot/missing" commit -qm drop >/dev/null
+    rcrun "$rcroot/missing" --version=9.9.9 --output-dir="$rcroot/out-missing"
+    [ "$rc" -eq 1 ] && [ ! -e "$rcroot/out-missing" ] \
+      && t_ok "rc: missing artifact rejected (exit 1)" \
+      || t_fail "rc missing artifact" "rc=$rc $rcout"
+  else
+    t_fail "rc missing artifact" "clone failed"
+  fi
+
+  # 24o. symlink artifact → exit 1
+  if mk_rc_clone "$rcroot/sym"; then
+    rm "$rcroot/sym/pixel-apps-setup.sh"
+    ln -s pixel-bootstrap.sh "$rcroot/sym/pixel-apps-setup.sh"
+    git -C "$rcroot/sym" add -A && git -C "$rcroot/sym" commit -qm symlink >/dev/null
+    rcrun "$rcroot/sym" --version=9.9.9 --output-dir="$rcroot/out-sym"
+    [ "$rc" -eq 1 ] && [ ! -e "$rcroot/out-sym" ] \
+      && t_ok "rc: symlink artifact rejected (exit 1)" \
+      || t_fail "rc symlink artifact" "rc=$rc $rcout"
+  else
+    t_fail "rc symlink artifact" "clone failed"
+  fi
+
+  # 24p. pre-existing output dir → exit 1 (no clobber)
+  mkdir -p "$rcroot/out-exists/pixel-development-1.0.0"
+  rcrun "$rcroot/repo" --version=1.0.0 --output-dir="$rcroot/out-exists"
+  [ "$rc" -eq 1 ] && [ -z "$(ls -A "$rcroot/out-exists/pixel-development-1.0.0")" ] \
+    && t_ok "rc: existing output dir rejected without clobber (exit 1)" \
+    || t_fail "rc output exists" "rc=$rc $rcout"
+
+  # 24q. --check validates and writes nothing
+  rcrun "$rcroot/repo" --version=1.0.0 --check --output-dir="$rcroot/out-check"
+  [ "$rc" -eq 0 ] && [ ! -e "$rcroot/out-check" ] && printf '%s' "$rcout" | grep -q 'check mode' \
+    && t_ok "rc --check: validates, exits 0, writes nothing" \
+    || t_fail "rc --check" "rc=$rc $rcout"
+
+  # 24r. SOURCE_DATE_EPOCH pins created_at
+  rcout="$(SOURCE_DATE_EPOCH=1700000000 bash "$rcroot/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$rcroot/out-sde" 2>&1)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -q '"created_at": "2023-11-14T22:13:20Z"' "$rcroot/out-sde/pixel-development-1.0.0/RELEASE-METADATA.json"; then
+    t_ok "rc: SOURCE_DATE_EPOCH pins created_at deterministically"
+  else
+    t_fail "rc SOURCE_DATE_EPOCH" "rc=$rc $rcout"
+  fi
+
+  # 24s. no host paths leak into the bundle
+  if [ "$rc" -eq 0 ] && ! grep -rF "$rcroot" "$rcroot/out-sde/pixel-development-1.0.0" >/dev/null 2>&1 \
+     && ! grep -rF "$ROOT" "$rcroot/out-sde/pixel-development-1.0.0" >/dev/null 2>&1; then
+    t_ok "rc: bundle contains no absolute host paths"
+  else
+    t_fail "rc host-path leak" "found repo paths in bundle"
+  fi
+else
+  t_fail "release candidate fixtures" "could not clone repo into \$tmp"
+fi
+
+# --- 25. release bundle verifier: integrity + failure injection -----------------
+VRB="$ROOT/scripts/verify-release-bundle.sh"
+vroot="$tmp/vb"; mkdir -p "$vroot"
+vb_good=''
+if mk_rc_clone "$vroot/repo" \
+   && bash "$vroot/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$vroot/out" >"$vroot/build.log" 2>&1; then
+  vb_good="$vroot/out/pixel-development-1.0.0"
+fi
+vrun(){ vout="$(bash "$VRB" "$@" 2>&1)"; rc=$?; }
+vcase(){ VB="$vroot/$1"; rm -rf "$VB"; cp -a "$vb_good" "$VB"; }
+vassert(){ # $1 want-verdict  $2 want-rc  $3 test-name
+  if [ "$rc" -eq "$2" ] && case "$vout" in *"verdict: $1"*) true;; *) false;; esac; then
+    t_ok "$3"
+  else
+    t_fail "$3" "rc=$rc want $1/$2"$'\n'"$vout"
+  fi
+}
+
+if [ -n "$vb_good" ]; then
+  # 25a. unsigned happy path: integrity-only, authenticity explicitly absent
+  vrun --bundle="$vb_good"
+  if [ "$rc" -eq 0 ] \
+     && case "$vout" in *"verdict: verified-integrity-only"*) true;; *) false;; esac \
+     && case "$vout" in *"authenticity NOT established"*) true;; *) false;; esac; then
+    t_ok "verify: unsigned bundle → verified-integrity-only (authenticity NOT claimed)"
+  else t_fail "verify integrity-only" "rc=$rc"$'\n'"$vout"; fi
+
+  # 25b. --require-signature without a signature → policy failure
+  vrun --bundle="$vb_good" --require-signature
+  vassert failed-policy 1 "verify: --require-signature without signature → failed-policy"
+
+  # 25c-g. layout failures
+  vrun --bundle="$vroot/no-such-bundle"
+  vassert failed-layout 1 "verify: missing bundle dir → failed-layout"
+  vcase extra;  : > "$VB/NOTES.txt"
+  vrun --bundle="$VB"; vassert failed-layout 1 "verify: unexpected entry → failed-layout"
+  vcase sym;    ln -s pixel-bootstrap.sh "$VB/evil.sh"
+  vrun --bundle="$VB"; vassert failed-layout 1 "verify: symlink entry → failed-layout"
+  vcase dirent; mkdir "$VB/subdir"
+  vrun --bundle="$VB"; vassert failed-layout 1 "verify: directory entry → failed-layout"
+  vcase miss;   rm "$VB/VERIFY.md"
+  vrun --bundle="$VB"; vassert failed-layout 1 "verify: missing core file → failed-layout"
+
+  # 25h-n. metadata schema failures
+  vcase m1; sed -i '/^  "version": /d' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: metadata missing required key → failed-metadata"
+  vcase m2; sed -i 's/"schema_version": "1.0"/"schema_version": "2.0"/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: unsupported schema version → failed-metadata"
+  vcase m3; sed -i -E 's/("commit": ")[0-9a-f]{40}/\1c1a59c7c/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: abbreviated commit → failed-metadata"
+  vcase m4; sed -i '/"path": "pixel-bootstrap.sh"/p' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: duplicate artifact entry → failed-metadata"
+  vcase m5; sed -i 's|"path": "bootstrap-checksums.txt"|"path": "../evil.sh"|' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: traversal path in metadata → failed-metadata"
+  vcase m6; sed -i 's/"mode": "0755", "role": "bootstrap"/"mode": "0644", "role": "bootstrap"/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: role/mode inconsistency → failed-metadata"
+  vcase m7; sed -i 's/"checksum_algorithm": "sha256"/"checksum_algorithm": "sha512"/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: unknown checksum algorithm → failed-metadata"
+
+  # 25o-r. checksum + consistency failures
+  vcase c1; printf 'x\n' >> "$VB/pixel-apps-setup.sh"
+  vrun --bundle="$VB"; vassert failed-checksum 1 "verify: altered artifact → failed-checksum"
+  vcase c2; chmod 600 "$VB/pixel-bootstrap.sh"
+  vrun --bundle="$VB"; vassert failed-checksum 1 "verify: mode drift → failed-checksum"
+  vcase c3; sed -i 's/"version": "1.0.0"/"version": "9.9.9"/' "$VB/SIGNING-MANIFEST.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: manifest/metadata version mismatch → failed-metadata"
+  vcase c4; sed -i -E 's/"created_at": "[0-9]{4}/"created_at": "2099/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB"; vassert failed-metadata 1 "verify: altered metadata breaks manifest binding → failed-metadata"
+  vcase c5
+  first2="$(head -c2 "$VB/SHA256SUMS")"; rep=00; [ "$first2" = 00 ] && rep=11
+  sed -i -E "0,/^[0-9a-f]{2}/s//$rep/" "$VB/SHA256SUMS"
+  vrun --bundle="$VB"; vassert failed-checksum 1 "verify: SHA256SUMS disagreement → failed-checksum"
+
+  # 25t-w. usage errors (exit 2) + metacharacter safety
+  vrun; [ "$rc" -eq 2 ] && t_ok "verify usage: missing --bundle exits 2" || t_fail "verify usage bundle" "rc=$rc"
+  vrun --bundle="$vb_good" --bogus; [ "$rc" -eq 2 ] && t_ok "verify usage: unknown flag exits 2" || t_fail "verify usage flag" "rc=$rc"
+  vrun --bundle="$vb_good" --signature=x; [ "$rc" -eq 2 ] && t_ok "verify usage: --signature without --keyring exits 2" || t_fail "verify usage sig/keyring" "rc=$rc"
+  pwn="$vroot/pwned"; rm -f "$pwn"
+  vrun --bundle='$(touch '"$pwn"')'
+  if [ "$rc" -eq 1 ] && [ ! -e "$pwn" ]; then t_ok "verify: metacharacter --bundle value is never executed"
+  else t_fail "verify bundle injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"; fi
+
+  # 25x. unverified .asc is labelled, never trusted
+  vcase ascnote; : > "$VB/SIGNING-MANIFEST.json.asc"
+  vrun --bundle="$VB"
+  if [ "$rc" -eq 0 ] && case "$vout" in *"NOT verified"*"verdict: verified-integrity-only"*) true;; *) false;; esac; then
+    t_ok "verify: unverified .asc noted, verdict stays integrity-only"
+  else t_fail "verify unverified asc" "rc=$rc"$'\n'"$vout"; fi
+else
+  t_fail "release verifier fixtures" "could not build a good bundle: $(cat "$vroot/build.log" 2>/dev/null)"
+fi
+
+# --- 26. release bundle verifier: signed fixtures (tier 2) ------------------------
+if command -v gpg >/dev/null 2>&1 && command -v gpgv >/dev/null 2>&1 \
+   && [ -f "$tmp/trusted.pub" ] && [ -n "$vb_good" ]; then
+  # ephemeral ed25519 keys were generated by section 19 ($GNUPGHOME exported);
+  # $tmp/trusted.pub = signer, $tmp/untrusted.pub = wrong key. Signing here is
+  # fixture-only — no production key exists or is required.
+  vsign(){ # $1 = copy name → fresh signed bundle copy in $VB
+    VB="$vroot/$1"; rm -rf "$VB"; cp -a "$vb_good" "$VB"
+    gpg --batch --yes --local-user t@example.invalid --detach-sign --armor \
+      --output "$VB/SIGNING-MANIFEST.json.asc" "$VB/SIGNING-MANIFEST.json" 2>/dev/null
+  }
+
+  vsign s1
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert verified-signed 0 "verify-signed: valid signature + matching keyring → verified-signed"
+
+  vsign s2
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub" --require-signature
+  vassert verified-signed 0 "verify-signed: valid signature with --require-signature → verified-signed"
+
+  vsign s3
+  # corrupt one base64 body character (armor CRC + signature both break);
+  # trailing garbage after the END line is ignored by gpgv, so this must be
+  # inside the body — line 4 is always base64 for an ed25519 detached sig
+  l4="$(sed -n '4p' "$VB/SIGNING-MANIFEST.json.asc" | head -c1)"; rep=A; [ "$l4" = A ] && rep=B
+  sed -i "4s/^./$rep/" "$VB/SIGNING-MANIFEST.json.asc"
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-signature 1 "verify-signed: corrupted signature fails closed"
+
+  vsign s4
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/untrusted.pub"
+  vassert failed-signature 1 "verify-signed: wrong public key → failed-signature"
+
+  vsign s5; printf 'x\n' >> "$VB/SIGNING-MANIFEST.json"
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-signature 1 "verify-signed: altered signed manifest → failed-signature"
+
+  # invariant 9: a valid signature must NOT bypass checksum verification
+  vsign s6; printf 'x\n' >> "$VB/pixel-bootstrap.sh"
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-checksum 1 "verify-signed: valid signature + altered artifact → failed-checksum"
+
+  # invariant 10: a valid signature must NOT bypass manifest/metadata consistency
+  vsign s7; sed -i -E 's/"created_at": "[0-9]{4}/"created_at": "2099/' "$VB/RELEASE-METADATA.json"
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-metadata 1 "verify-signed: valid signature + altered metadata → failed-metadata"
+
+  # bundle-embedded .asc is auto-detected when --keyring is supplied
+  vsign s8
+  vrun --bundle="$VB" --keyring="$tmp/trusted.pub" --require-signature
+  vassert verified-signed 0 "verify-signed: bundle .asc auto-detected with --keyring → verified-signed"
+
+  vsign s9
+  gpg --batch --yes --local-user t@example.invalid --detach-sign --armor \
+    --output "$VB/SIGNING-MANIFEST.json.asc" "$VB/INSTALL.md" 2>/dev/null
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring="$tmp/trusted.pub"
+  vassert failed-signature 1 "verify-signed: signature over the wrong file → failed-signature"
+
+  vsign s10
+  vrun --bundle="$VB" --require-signature
+  vassert failed-policy 1 "verify-signed: required signature + no keyring → failed-policy"
+
+  pwn="$vroot/pwned-keyring"; rm -f "$pwn"
+  vsign s11
+  vrun --bundle="$VB" --signature="$VB/SIGNING-MANIFEST.json.asc" --keyring='$(touch '"$pwn"')'
+  if [ "$rc" -eq 1 ] && [ ! -e "$pwn" ]; then t_ok "verify-signed: metacharacter --keyring value is never executed"
+  else t_fail "verify keyring injection" "rc=$rc pwned=$([ -e "$pwn" ] && echo yes || echo no)"; fi
+elif [ -z "$vb_good" ]; then
+  : # fixture build already reported a failure in section 25
+else
+  t_skip "gpg/gpgv not installed — signed bundle fixtures skipped (install gnupg to run)"
+fi
+
+# --- 27. release reproducibility (SOURCE_DATE_EPOCH) ----------------------------
+# Two independent builds from the same commit must be byte-identical when
+# SOURCE_DATE_EPOCH is pinned; a different epoch may change only created_at
+# (and the signing manifest's digest bound to it).
+tree_listing(){ (cd "$1" && find . -type f -exec stat -c '%a %Y %n' {} + 2>/dev/null | sort -k3); }
+tree_hashes(){ (cd "$1" && find . -type f -exec sha256sum {} + | sort -k2); }
+repro_build(){ # $1 = output parent, $2 = SOURCE_DATE_EPOCH (empty = unset)
+  if [ -n "$2" ]; then
+    SOURCE_DATE_EPOCH="$2" bash "$tmp/repro/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$1" >/dev/null 2>&1
+  else
+    bash "$tmp/repro/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$1" >/dev/null 2>&1
+  fi
+}
+
+if mk_rc_clone "$tmp/repro/repo"; then
+  # 27a. same commit + same epoch → byte-identical (content, modes, mtimes)
+  repro_build "$tmp/repro/a" 1700000000; repro_build "$tmp/repro/b" 1700000000
+  ba="$tmp/repro/a/pixel-development-1.0.0"; bb="$tmp/repro/b/pixel-development-1.0.0"
+  if [ -d "$ba" ] && [ -d "$bb" ] \
+     && diff -r "$ba" "$bb" >/dev/null 2>&1 \
+     && [ "$(tree_listing "$ba")" = "$(tree_listing "$bb")" ] \
+     && [ "$(tree_hashes "$ba")" = "$(tree_hashes "$bb")" ]; then
+    t_ok "reproducibility: two SDE-pinned builds are byte-identical (content, modes, mtimes)"
+  else
+    t_fail "reproducibility SDE-pinned" "$(diff -r "$ba" "$bb" 2>&1 | head -5)"
+  fi
+
+  # 27b. different epoch → only metadata/manifest content may change
+  repro_build "$tmp/repro/c" 1700000000; repro_build "$tmp/repro/d" 1700000001
+  bc="$tmp/repro/c/pixel-development-1.0.0"; bd="$tmp/repro/d/pixel-development-1.0.0"
+  if [ -d "$bc" ] && [ -d "$bd" ]; then
+    h1="$(tree_hashes "$bc" | grep -v 'RELEASE-METADATA.json\|SIGNING-MANIFEST.json')"
+    h2="$(tree_hashes "$bd" | grep -v 'RELEASE-METADATA.json\|SIGNING-MANIFEST.json')"
+    if [ "$h1" = "$h2" ]; then
+      t_ok "reproducibility: different SDE changes only metadata+manifest (payload stable)"
+    else
+      t_fail "reproducibility different-SDE" "payload files changed between epochs"
+    fi
+  else
+    t_fail "reproducibility different-SDE" "build failed"
+  fi
+
+  # 27c. non-numeric epoch → clear failure, no bundle (no shell arithmetic edge)
+  rcout="$(SOURCE_DATE_EPOCH=notanumber bash "$tmp/repro/repo/scripts/build-release-candidate.sh" --version=1.0.0 --output-dir="$tmp/repro/e" 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ] && [ ! -e "$tmp/repro/e" ] && printf '%s' "$rcout" | grep -q 'SOURCE_DATE_EPOCH'; then
+    t_ok "reproducibility: non-numeric SOURCE_DATE_EPOCH rejected (exit 1, no bundle)"
+  else
+    t_fail "reproducibility bad SDE" "rc=$rc $rcout"
+  fi
+else
+  t_fail "reproducibility fixtures" "clone failed"
+fi
+
+# --- 28. release documentation contracts (§5 docs + verifier hygiene) -------------
+SIGN_DOC="$ROOT/docs/RELEASE_SIGNING.md"
+KEY_DOC="$ROOT/docs/SIGNING_KEY_LIFECYCLE.md"
+RCI_DOC="$ROOT/docs/REMOTE_CI_VERIFICATION.md"
+
+# 28a. signing doc: operator sign + verify commands and the core policy
+if [ -f "$SIGN_DOC" ] \
+   && grep -qF -- '--detach-sign --armor' "$SIGN_DOC" \
+   && grep -qF -- '--require-signature' "$SIGN_DOC" \
+   && grep -qi 'never replaces checksum verification' "$SIGN_DOC"; then
+  t_ok "RELEASE_SIGNING.md: sign/verify commands + signature-never-replaces-checksums policy"
+else t_fail "RELEASE_SIGNING.md contract" "missing command or policy"; fi
+
+# 28b. key lifecycle doc: covers the full lifecycle, carries no key material,
+#      and marks fixture keys non-production
+if [ -f "$KEY_DOC" ] \
+   && grep -qi 'rotation' "$KEY_DOC" && grep -qi 'revocation' "$KEY_DOC" \
+   && grep -qi 'compromise' "$KEY_DOC" && grep -qi 'backup' "$KEY_DOC" \
+   && grep -qi 'non-production' "$KEY_DOC" \
+   && ! grep -q 'PRIVATE KEY-----' "$KEY_DOC"; then
+  t_ok "SIGNING_KEY_LIFECYCLE.md: lifecycle covered, no key material, fixtures marked non-production"
+else t_fail "SIGNING_KEY_LIFECYCLE.md contract" "missing topic or leaked key material"; fi
+
+# 28c. remote CI runbook: inspect commands, review-branch cleanup, merge criteria
+if [ -f "$RCI_DOC" ] \
+   && grep -qF 'gh run list' "$RCI_DOC" && grep -qF 'gh run watch' "$RCI_DOC" \
+   && grep -qF -- 'git push origin --delete' "$RCI_DOC" \
+   && grep -qi 'merge criteria' "$RCI_DOC"; then
+  t_ok "REMOTE_CI_VERIFICATION.md: gh inspection + branch cleanup + merge criteria"
+else t_fail "REMOTE_CI_VERIFICATION.md contract" "missing runbook element"; fi
+
+# 28d. none of the three docs restores pipe-to-shell installation
+if grep -hE '\|[[:space:]]*(ba)?sh([[:space:]]|$)' "$SIGN_DOC" "$KEY_DOC" "$RCI_DOC" 2>/dev/null | grep -q .; then
+  t_fail "release docs pipe-to-shell" "found '| sh/bash' in a release doc"
+else
+  t_ok "release docs contain no pipe-to-shell installation"
+fi
+
+# 28e. README §11 points at all three release docs
+if grep -qF 'docs/RELEASE_SIGNING.md' "$ROOT/README.md" \
+   && grep -qF 'docs/SIGNING_KEY_LIFECYCLE.md' "$ROOT/README.md" \
+   && grep -qF 'docs/REMOTE_CI_VERIFICATION.md' "$ROOT/README.md"; then
+  t_ok "README §11 links the release signing, key lifecycle, and remote CI docs"
+else t_fail "README release-doc pointers" "missing link"; fi
+
+# 28f. release process records the archive-handling decision
+if grep -q 'Archive handling' "$ROOT/docs/BOOTSTRAP_RELEASE_PROCESS.md"; then
+  t_ok "BOOTSTRAP_RELEASE_PROCESS.md documents the archive-handling decision"
+else t_fail "release process archive section" "missing"; fi
+
+# 28g. the bundle verifier is side-effect free: a verify run leaves the bundle
+#      byte-identical (invariant 18). Reuses the §27a fixture bundle.
+vb="$tmp/repro/a/pixel-development-1.0.0"
+if [ -d "$vb" ]; then
+  before="$(tree_hashes "$vb")"
+  bash "$ROOT/scripts/verify-release-bundle.sh" --bundle="$vb" >/dev/null 2>&1
+  vrc=$?
+  after="$(tree_hashes "$vb")"
+  if [ "$vrc" -eq 0 ] && [ "$before" = "$after" ]; then
+    t_ok "verify-release-bundle.sh is side-effect free (bundle byte-identical after verify)"
+  else
+    t_fail "verifier side effects" "rc=$vrc or bundle changed"
+  fi
+else
+  t_fail "verifier side-effect fixture" "§27 bundle missing"
+fi
+
+# --- 29. repository readiness (session 7) -----------------------------------------
+# 29a. README section 10's layout block must stay current: every directory the
+#      release story depends on is listed, so newcomers are not misled.
+lay="$(sed -n '/^## 10\. Repo layout/,/^## 11\./p' "$ROOT/README.md")"
+missing=""
+for d in scripts/ tests/ config/ docs/ reports/ evidence/ .github/; do
+  printf '%s' "$lay" | grep -qF "$d" || missing="$missing $d"
+done
+if [ -z "$missing" ]; then
+  t_ok "README §10 repo layout lists all release-relevant directories"
+else
+  t_fail "README §10 layout stale" "missing:$missing"
+fi
+
+# 29b. docs reference release scripts by their real path (scripts/…), never a
+#      bare name that only resolves by accident.
+bare="$(grep -rn '`verify-release-bundle\.sh\|`build-release-candidate\.sh\|`update-bootstrap-checksums\.sh\|`verify-bootstrap-signature\.sh\|`ci-local\.sh' "$ROOT/docs" "$ROOT/README.md" 2>/dev/null || true)"
+if [ -z "$bare" ]; then
+  t_ok "docs reference release scripts by their scripts/ path"
+else
+  t_fail "bare script reference in docs" "$bare"
+fi
+
 # --- summary ---------------------------------------------------------------------
 echo
+if [ "${#FAILED_TESTS[@]}" -gt 0 ]; then
+  printf 'failed tests:\n'
+  printf '  - %s\n' "${FAILED_TESTS[@]}"
+  echo
+fi
 printf 'passed: %d   failed: %d   skipped: %d\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

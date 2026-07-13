@@ -7,8 +7,8 @@
 #  buttons. It also finds (or downloads) the two setup scripts so the very    #
 #  first run is a single paste.                                               #
 #                                                                             #
-#  First-run one-liner (if you host the scripts):                             #
-#    curl -fsSL <BASE>/pixel-bootstrap.sh | PIXEL_REPO_BASE=<BASE> bash       #
+#  Install: use the VERIFIED flow in README.md §1 (commit-pinned URL +        #
+#  SHA-256 check). Pipe-to-shell is intentionally not the documented path.    #
 #  Or save all three .sh files together and run:  bash pixel-bootstrap.sh     #
 #                                                                             #
 #  Usage: bash pixel-bootstrap.sh [--open-store] [--repo-base=URL] [-h]       #
@@ -25,7 +25,7 @@ for arg in "$@"; do
   case "$arg" in
     --open-store)   OPEN_STORE=1 ;;
     --repo-base=*)  REPO_BASE="${arg#*=}" ;;
-    --help|-h) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown flag: $arg (try --help)"; exit 2 ;;
   esac
 done
@@ -40,6 +40,40 @@ ok(){   printf '  %s✔%s %s\n' "$GRN" "$C_R" "$*"; }
 warn(){ printf '  %s▲%s %s\n' "$YLW" "$C_R" "$*" >&2; }
 die(){  printf '\n%s✖ %s%s\n' "$RED" "$*" "$C_R" >&2; exit 1; }
 have(){ command -v "$1" >/dev/null 2>&1; }
+
+# ---------------------------------------------------------------------------
+# Download verification (session 4, audit R1)
+# Scripts fetched over the network are downloaded to a temp file and verified
+# against pinned SHA-256 digests BEFORE installation — remote content never
+# reaches $DEST unverified, and is never piped to a shell. Local/cached copies
+# are operator-trusted and skip verification. Source of truth for the pins:
+# config/bootstrap-checksums.txt (sync enforced by harness §16; update
+# procedure in docs/CLI_CONTRACT.md §8).
+# ---------------------------------------------------------------------------
+DLTMP="$(mktemp -d "${TMPDIR:-/tmp}/pixel-dl.XXXXXX")" \
+  || die "cannot create download temp dir (check TMPDIR=${TMPDIR:-/tmp})"
+trap 'rm -rf "$DLTMP"' EXIT
+trap 'exit 130' INT    # route signals through the EXIT trap → temp cleanup
+trap 'exit 143' TERM
+
+expected_sha256(){ # $1 script name → prints pinned sha256; rc 1 if no entry
+  if [ -n "${PIXEL_BOOTSTRAP_CHECKSUM_FILE:-}" ]; then   # test/maintenance seam
+    awk -v n="$1" '$1 ~ /^[0-9a-fA-F]{64}$/ && $2 == n {print tolower($1); f=1} END{exit !f}' \
+      "$PIXEL_BOOTSTRAP_CHECKSUM_FILE" 2>/dev/null
+    return
+  fi
+  case "$1" in
+    pixel-dev-setup.sh)  printf '%s\n' '444e59fb0e125f70c4c7b4ad03f7e6e8dd52b0af0ad7d71a41357abee310abc6' ;;
+    pixel-apps-setup.sh) printf '%s\n' 'b7a341135e1abeb10004e28d8ea3505e758feef288556595339f6162e0179019' ;;
+    *) return 1 ;;
+  esac
+}
+
+sha256_of(){ # $1 file → prints sha256; rc 1 if no hash tool
+  if have sha256sum; then sha256sum "$1" | awk '{print $1}'
+  elif have shasum; then shasum -a 256 "$1" | awk '{print $1}'
+  else return 1; fi
+}
 
 # ---------------------------------------------------------------------------
 # 1. Preflight
@@ -61,14 +95,33 @@ for s in $SETUP_SCRIPTS; do
     [ -f "$d/$s" ] && { found="$d/$s"; break; }
   done
   if [ -n "$found" ]; then
-    cp "$found" "$DEST/$s" && ok "$s (copied from ${found%/*})"
-  elif curl -fsSL -o "$DEST/$s" "$REPO_BASE/$s" 2>/dev/null; then
-    ok "$s (downloaded)"
+    cp "$found" "$DEST/$s" \
+      || die "could not copy $found to $DEST/$s — copy it there manually and re-run"
+    ok "$s (copied from ${found%/*})"
   else
-    warn "$s not found locally and download failed."
-    info "Put it next to this script, or set --repo-base=<URL where it's hosted>."
+    # Network path — fail closed: nothing is installed unless it downloads
+    # whole AND matches the pinned digest. On failure the run stops here;
+    # the EXIT trap removes the temp file, so no partial content survives.
+    exp="$(expected_sha256 "$s")" \
+      || die "no pinned checksum for $s — refusing to fetch unverified content (see config/bootstrap-checksums.txt)"
+    have sha256sum || have shasum \
+      || die "no SHA-256 tool (sha256sum or shasum) — cannot verify $s; refusing to install it"
+    if curl -fsSL -o "$DLTMP/$s" "$REPO_BASE/$s" 2>/dev/null; then
+      got="$(sha256_of "$DLTMP/$s")"
+      if [ "$got" = "$exp" ]; then
+        mv "$DLTMP/$s" "$DEST/$s" \
+          || die "could not install $s to $DEST — check free space"
+        ok "$s (downloaded, sha256 verified)"
+      else
+        die "checksum mismatch for $s — expected $exp, got ${got:-<unreadable>}; NOT installed (source may be tampered, or the pin is stale)"
+      fi
+    else
+      rm -f "$DLTMP/$s"
+      die "could not download $s from $REPO_BASE — nothing installed. Put it next to this script, or fix --repo-base."
+    fi
   fi
-  chmod +x "$DEST/$s" 2>/dev/null || true
+  chmod +x "$DEST/$s" 2>/dev/null \
+    || warn "could not chmod +x $DEST/$s — run: chmod +x '$DEST/$s'"
 done
 
 # ---------------------------------------------------------------------------
@@ -146,9 +199,15 @@ EOF
 step "4. Termux:Widget app"
 if [ "$OPEN_STORE" = 1 ]; then
   url="https://f-droid.org/packages/com.termux.widget/"
-  if have termux-open-url; then termux-open-url "$url"
-  elif have am; then am start -a android.intent.action.VIEW -d "$url" >/dev/null 2>&1; fi
-  ok "Opened Termux:Widget on F-Droid — install it, then add the widget to your home screen."
+  if have termux-open-url; then
+    termux-open-url "$url"
+    ok "Opened Termux:Widget on F-Droid — install it, then add the widget to your home screen."
+  elif have am; then
+    am start -a android.intent.action.VIEW -d "$url" >/dev/null 2>&1
+    ok "Opened Termux:Widget on F-Droid — install it, then add the widget to your home screen."
+  else
+    warn "no URL opener (termux-open-url/am) — install com.termux.widget from F-Droid manually: $url"
+  fi
 else
   info "Install the ${C_B}Termux:Widget${C_R} app from F-Droid (com.termux.widget) — re-run with --open-store to open it."
 fi

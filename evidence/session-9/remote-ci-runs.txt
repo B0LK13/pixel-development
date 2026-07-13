@@ -1,0 +1,29 @@
+== session-9 remote CI runs ==
+date: 2026-07-13T06:15:36+00:00
+
+authorization: operator approved push + PR (2026-07-12); merge explicitly
+NOT pre-authorized — stop at merge-readiness.
+
+push 1: ed571b4 (new branch, no force) -> PR #1 opened
+  29227080130  push          FAILURE  51s  (suite 48s FAIL / release 7s ok)
+  29227091202  pull_request  FAILURE  51s  (same 3 tests — see failure-classification.txt)
+  29227094782  Copilot Code Review (GitHub-injected, not repo-controlled, not required)
+
+correction: 63e4091 fetch-depth: 0 both checkouts + 71de27a §22 pin
+  classification: WORKFLOW CONFIGURATION DEFECT (shallow default checkout vs
+  history-dependent §8/§18/§28 tests); mechanism reproduced locally
+
+push 2: ed571b4..71de27a (fast-forward, no force; gitleaks: no secrets)
+  29228312352  push          SUCCESS  46s (suite 43s / release 8s)
+  29228314636  pull_request  SUCCESS  47s (suite 42s / release 7s)
+  remote suite: passed: 310 failed: 0 skipped: 0 (exact local match)
+  PR #1 rollup: suite x2 SUCCESS, release-candidate-check x2 SUCCESS,
+                mergeable=MERGEABLE, mergeStateStatus=CLEAN
+
+runner note: suite 42-43s remote vs 510-863s local throttled (~12-20x);
+10m timeout has ~14x headroom. Node 20 deprecation annotation on
+checkout@v4 (GitHub forces Node 24) — informational, tracked with TD-3.
+
+final deliverables push: this file's commit will trigger one more run;
+its result is verified and reported in the session summary (evidence-only
+delta: reports/ + evidence/, no gate-scanned content).

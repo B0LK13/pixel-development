@@ -1,0 +1,24 @@
+== session-8 baseline record ==
+date: 2026-07-12T18:24:58+00:00
+branch: auto/integrate-session-8
+HEAD: e4304d5122741cfac614c7d3d00160c91e715ddf
+descends from e4304d5: yes
+main: 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c (expected 711c23b41238528c64b5e9a59a5a6cb7ab2c5f9c)
+working tree: DIRTY
+?? evidence/session-8/
+session-7 evidence: ci-parity.txt release-verify.txt reproducibility.txt test-results.txt test-timings.txt 
+session-7 reports: session-7-final-report.md session-7-recovery.md 
+private key material in repo: 0 file(s) (expected 0)
+run integrity: none (HEAD and branch stable for the whole run)
+
+== timed gate run (same commands as scripts/ci-local.sh, in order) ==
+gate 1 git diff --check:       rc=0  0s
+gate 2 checksum --check:       rc=0  0s
+gate 3 bash -n (10 scripts):    rc=0  1s
+gate 4 shellcheck -S warning:   rc=0  3s (99 = absent, self-skip)
+gate 5 tests/run_tests.sh:      rc=0  578s
+total wall: 582s
+
+suite summary: passed: 288   failed: 0   skipped: 0
+
+baseline verdict: GREEN

@@ -1,0 +1,28 @@
+== session-9 remote configuration ==
+date: 2026-07-12T21:29:51+00:00
+
+remote: origin = https://github.com/B0LK13/pixel-development (fetch+push)
+repo: public, default branch main, gh token scopes: gist, read:org, repo, workflow
+gh identity: B0LK13 (admin on repo)
+
+== ls-remote origin (complete) ==
+bf8109c826cded1bb0cef0744141d62e08f7e613  HEAD
+bf8109c826cded1bb0cef0744141d62e08f7e613  refs/heads/main
+(remote has exactly one ref; no auto/* branches, no tags)
+
+== divergence ==
+remote main: bf8109c 'feat: pixel-development v1.0.0'
+local main:  711c23b (35 commits ahead of remote main)
+integrate:   6497257 (89 commits ahead of local main, 124 ahead of remote)
+merge-base(main, origin/main) = bf8109c = remote main itself
+remote main is an ANCESTOR of local main; no divergence, no force needed.
+remote contains NO session 1-8 work and NO .github/ directory at all.
+
+== branch protection (gh api) ==
+main: NOT protected (HTTP 404 'Branch not protected')
+required checks: none configured remotely (recommendation in promotion policy)
+
+== implications ==
+- pushing auto/integrate-session-8 creates a new remote branch; fast-forward-safe, no force
+- a PR to main would span all 125 commits (sessions 1-8)
+- the workflow has never executed on GitHub: first push is its first validation

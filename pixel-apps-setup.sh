@@ -32,7 +32,7 @@ for arg in "$@"; do
     --no-font)            NO_FONT=1 ;;
     --yes|-y)             : ;;  # accepted for CLI parity with pixel-dev-setup.sh (no prompts here)
     --ssh-port=*)         SSH_PORT="${arg#*=}" ;;
-    --help|-h) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown flag: $arg (try --help)"; exit 2 ;;
   esac
 done
@@ -60,7 +60,7 @@ step(){ printf '\n%s%s▌ %s%s\n' "$C_B" "$BLU" "$*" "$C_R"; _log "STEP $*"; }
 info(){ printf '  %s•%s %s\n' "$BLU" "$C_R" "$*"; _log "INFO $*"; }
 ok(){   printf '  %s✔%s %s\n' "$GRN" "$C_R" "$*"; _log "OK   $*"; }
 warn(){ printf '  %s▲%s %s\n' "$YLW" "$C_R" "$*" >&2; _log "WARN $*"; }
-die(){  printf '\n%s✖ %s%s\n' "$RED" "$*" "$C_R" >&2; exit 1; }
+die(){  printf '\n%s✖ %s%s\n' "$RED" "$*" "$C_R" >&2; _log "FATAL $*"; exit 1; }
 have(){ command -v "$1" >/dev/null 2>&1; }
 trap 'warn "Step failed near line $LINENO (rc=$?) — continuing; see $LOG_FILE"' ERR
 

@@ -1,0 +1,30 @@
+== session-9 remote failure classification (Phase 10) ==
+date: 2026-07-13T05:49:07+00:00
+
+run: 29227091202 (pull_request, PR #1) — identical failure on push run 29227080130
+job: suite (ubuntu-latest) — FAILED at 48s; release-candidate-check — SUCCESS at 7s
+
+failing tests (from the run log, surfaced by the session-8 D3 recap):
+  1. clean-clone smoke: suite must pass from a fresh clone
+  2. README pin does not match the pinned commit (§18)
+  3. release doc pin history (§28)
+  totals: 306 passed / 3 failed / 0 skipped
+
+classification: WORKFLOW CONFIGURATION DEFECT
+  actions/checkout@v4 defaults to fetch-depth: 1. The anchor-pin tests need
+  the README-pinned commit object (c8a5466) and history ancestry; the
+  clean-clone smoke's nested clone inherits the shallowness and fails the
+  same pin tests. Not a product defect: full-history trees pass everywhere.
+
+local reproduction (mechanism proof, depth-1 fixture clone):
+  git cat-file -t c8a5466 -> 'could not get object info' (rc 128)
+  git show c8a5466:pixel-bootstrap.sh -> rc 128 (object absent)
+  git clone --local of a shallow repo -> falls back, warns, stays shallow
+  => all three remote failures reproduced by mechanism
+
+reproduces locally with full history: NO (local gates green at every tip)
+impact on promotion: blocking (required check red) until fixed
+required correction: fetch-depth: 0 on both checkout steps + harness §22 pin
+
+rejected responses: weakening §18/§28/§8, continue-on-error, skipping the
+pin tests remotely — all would hide a real environment mismatch.

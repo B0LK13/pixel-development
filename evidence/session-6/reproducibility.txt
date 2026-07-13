@@ -1,0 +1,18 @@
+Session 6 reproducibility evidence
+Generated: 2026-07-11T18:26:44Z (UTC)
+Method: two independent builds from the same clone/commit with
+SOURCE_DATE_EPOCH=1700000000, then directory/content/mode/mtime compare.
+
+$ diff -r A B
+(no differences)
+
+$ compare mode+mtime+path listings (find -exec stat)
+IDENTICAL (9 files)
+
+$ compare per-file sha256 listings
+IDENTICAL
+
+CONCLUSION: byte-for-byte reproducible when SOURCE_DATE_EPOCH is fixed.
+Without it, only RELEASE-METADATA.json created_at (and the signing
+manifest digest bound to it) varies; all payload content is stable
+(harness section 27 proves both properties).

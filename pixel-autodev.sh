@@ -28,8 +28,10 @@ MODEL="sonnet"
 AGENT="claude"
 # Agent binary override seam — lets tests inject a stub agent without touching
 # PATH (defaults resolve to the real installed agents; no behavior change).
-CLAUDE_BIN="${CLAUDE_BIN:-claude}"
-CODEX_BIN="${CODEX_BIN:-codex}"
+# Note: ${VAR-default} (no colon) so an explicitly EMPTY override stays empty —
+# preflight then treats the agent as missing. Unset keeps the default binary.
+CLAUDE_BIN="${CLAUDE_BIN-claude}"
+CODEX_BIN="${CODEX_BIN-codex}"
 PMODE="dontAsk"     # CI-safe: no prompts, honors allow/deny lists
 PUSH=0; DRY=0
 CHARTER="PIXEL_AGENT.md"
@@ -47,7 +49,7 @@ for a in "$@"; do case "$a" in
   --push)        PUSH=1 ;;
   --dry-run)     DRY=1 ;;
   --yes|-y)      : ;;  # accepted for CLI parity with pixel-dev-setup.sh (autodev never prompts)
-  --help|-h) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  --help|-h) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "Unknown flag: $a (try --help)"; exit 2 ;;
 esac; done
 [ -z "$BACKLOG" ] && BACKLOG="$WORKSPACE/BACKLOG.md"
@@ -95,6 +97,28 @@ die(){  printf '\n%s✖ %s%s\n' "$RED" "$*" "$C_R" >&2; exit 1; }
 have(){ command -v "$1" >/dev/null 2>&1; }
 rec(){  mkdir -p "$(dirname "$LOG")"; printf '%s\n' "$*" >> "$LOG"; }
 
+# Resolve a required dependency to a path, honouring a narrow per-tool
+# override seam (TIMEOUT_BIN, GIT_BIN, CLAUDE_BIN, CODEX_BIN):
+#   override UNSET           → default PATH resolution (production behaviour)
+#   override SET but empty   → treated as missing (lets tests simulate absence)
+#   override SET with '/'    → must be an executable file; used as-is
+#   override SET, bare name  → resolved through PATH like the default
+# The seam only affects detection/reporting — CLI validation runs earlier and
+# is never bypassed, and every resolved path is used quoted.
+resolve_required_tool(){ # $1 display name  $2 override var name → prints path; rc 1 if unresolvable
+  local name="$1" ovar="$2" val path
+  if declare -p "$ovar" >/dev/null 2>&1; then
+    val="${!ovar}"
+    [ -n "$val" ] || return 1
+    case "$val" in
+      */*) [ -x "$val" ] && { printf '%s\n' "$val"; return 0; }; return 1 ;;
+      *) path="$(command -v "$val" 2>/dev/null)" && [ -n "$path" ] && { printf '%s\n' "$path"; return 0; }; return 1 ;;
+    esac
+  fi
+  path="$(command -v "$name" 2>/dev/null)" || return 1
+  [ -n "$path" ] && printf '%s\n' "$path"
+}
+
 # ---------------------------------------------------------------------------
 # 1. Preflight — must be in the glibc devbox, agent authed, git ready
 # ---------------------------------------------------------------------------
@@ -106,15 +130,21 @@ preflight(){
   if [ "$DRY" = 1 ]; then
     info "dry-run: skipping agent resolution (no agent is invoked)"
   else
-    case "$(command -v "$AGENT" 2>/dev/null)" in
-      *com.termux*) die "'$AGENT' is resolving to the Termux binary. You are not in the devbox — run: devbox, then retry." ;;
-      "") die "'$AGENT' not found. Enter the devbox and install the AI stack first." ;;
-      *) ok "agent: $AGENT ($(command -v "$AGENT"))" ;;
+    local agent_bin_var agent_path
+    case "$AGENT" in
+      claude) agent_bin_var=CLAUDE_BIN ;;
+      codex)  agent_bin_var=CODEX_BIN ;;
     esac
+    agent_path="$(resolve_required_tool "$AGENT" "$agent_bin_var")" \
+      || die "'$AGENT' not found. Enter the devbox and install the AI stack first."
+    case "$agent_path" in
+      *com.termux*) die "'$AGENT' is resolving to the Termux binary. You are not in the devbox — run: devbox, then retry." ;;
+    esac
+    ok "agent: $AGENT ($agent_path)"
   fi
-  have timeout || die "GNU timeout (coreutils) is required in the devbox"
+  resolve_required_tool timeout TIMEOUT_BIN >/dev/null || die "GNU timeout (coreutils) is required in the devbox — install with: apt-get install -y coreutils"
   have jq || { info "installing jq…"; apt-get install -y -qq jq >/dev/null 2>&1 || warn "jq missing (JSON parse limited)"; }
-  have git || die "git not installed in devbox"
+  resolve_required_tool git GIT_BIN >/dev/null || die "git not installed in devbox — install with: apt-get install -y git"
   [ -d "$WORKSPACE" ] || die "workspace not found: $WORKSPACE (set --workspace=DIR)"
   ok "workspace: $WORKSPACE"
   if [ ! -f "$BACKLOG" ]; then
@@ -272,14 +302,19 @@ do_task(){ # $1 index
   ( cd "$dir" && git switch -c "auto/$slug" >/dev/null 2>&1 || git switch "auto/$slug" >/dev/null 2>&1 )
 
   local pf; pf="$(mktemp)"
-  cat > "$pf" <<EOF
-Task from BACKLOG.md: $text
-
-Work in the current repository ($dir). Read $WORKSPACE/$CHARTER and follow it.
+  # Backlog text is DATA, never code: every backlog-derived value ($text, and
+  # $dir via the [repo] prefix) goes through printf %s, and the static body is
+  # a quoted heredoc — no expansion of $(...)/backticks in task text can ever
+  # occur, even after future edits to this block. Pinned by tests §6f.
+  {
+    printf 'Task from BACKLOG.md: %s\n\n' "$text"
+    printf 'Work in the current repository (%s). Read %s/%s and follow it.\n' "$dir" "$WORKSPACE" "$CHARTER"
+    cat <<'EOF'
 Make the smallest verified change that completes the task. Run the project's
 tests if any exist. Do not commit, push, or run destructive git commands —
 version control is handled for you. End with a 2–4 line summary.
 EOF
+  } > "$pf"
 
   info "dispatching agent (max-turns=$MAX_TURNS, budget=\$$BUDGET)…"
   local out; out="$(agent_run "$dir" "$pf")"; local rc=$?
@@ -312,16 +347,24 @@ EOF
 
   info "verifying…"
   if ( cd "$dir" && run_tests ); then
-    ( cd "$dir" && git add -A && git commit -q -m "feat(auto): $text" )
-    [ "$PUSH" = 1 ] && ( cd "$dir" && git push -u origin "auto/$slug" 2>/dev/null && info "pushed auto/$slug" || warn "push failed" )
-    mark_done "$raw"
-    ok "task complete → branch auto/$slug${cost:+  (\$$cost)}"
-    rec "- RESULT: DONE on auto/$slug"; return 0
+    if ( cd "$dir" && git add -A && git commit -q -m "feat(auto): $text" ); then
+      [ "$PUSH" = 1 ] && ( cd "$dir" && git push -u origin "auto/$slug" 2>/dev/null && info "pushed auto/$slug" || warn "push failed" )
+      mark_done "$raw"
+      ok "task complete → branch auto/$slug${cost:+  (\$$cost)}"
+      rec "- RESULT: DONE on auto/$slug"; return 0
+    fi
+    # commit failed (e.g. broken signing config): never claim done — the
+    # task stays open and the branch keeps the agent's work for review
+    warn "commit failed — task stays open; branch auto/$slug kept with the agent's work for manual review"
+    rec "- RESULT: COMMIT FAILED (branch kept)"; return 1
   else
     warn "tests failed — keeping branch auto/$slug for review, task stays open"
-    ( cd "$dir" && git add -A && git commit -q -m "wip(auto): $text (tests failing)" )
-    ( cd "$dir" && git switch "$base" 2>/dev/null )
-    rec "- RESULT: TESTS FAILED (branch kept)"; return 1
+    if ( cd "$dir" && git add -A && git commit -q -m "wip(auto): $text (tests failing)" ); then
+      ( cd "$dir" && git switch "$base" 2>/dev/null )
+      rec "- RESULT: TESTS FAILED (branch kept)"; return 1
+    fi
+    warn "wip commit also failed — branch auto/$slug left checked out with uncommitted work"
+    rec "- RESULT: TESTS FAILED + COMMIT FAILED (branch kept)"; return 1
   fi
 }
 

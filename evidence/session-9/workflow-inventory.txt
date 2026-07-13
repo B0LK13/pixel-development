@@ -1,0 +1,22 @@
+== session-9 workflow inventory: .github/workflows/test.yml ==
+date: 2026-07-12T21:29:51+00:00
+
+triggers: push[branches: main, 'auto/*'], pull_request (no branch filter)
+top-level permissions: contents: read (least privilege)
+concurrency: group tests-${{ github.ref }}, cancel-in-progress: true
+secrets referenced: NONE (no ${{ secrets.* }} anywhere in the file)
+artifacts produced: none (no upload-artifact; tee'd logs stay in-job)
+
+job 1: suite (ubuntu-latest, timeout 10m, bash)
+  steps: actions/checkout@v4; apt install shellcheck; git diff --check;
+         update-bootstrap-checksums.sh --check; tests/run_tests.sh
+  publication risk: none
+
+job 2: release-candidate-check (ubuntu-latest, timeout 5m, bash)
+  steps: checkout@v4; build fixture RC (version 0.0.0 reserved, SDE=0);
+         unsigned verify + grep verdict; second build + diff -r (reproducibility);
+         throwaway ed25519 key per run; signed verify + grep verdict
+  publication risk: none (no tag, no release, no push; fixture key never persisted)
+
+publication-capable workflows in repo: NONE (this is the only workflow file)
+equals-form flags: yes at all 6 invocation sites (session-8 fix 66aedb9, pinned by harness §22)

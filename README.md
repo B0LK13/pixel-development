@@ -12,13 +12,37 @@ while you sleep.
 ## 1. Quick start
 
 **Prerequisite:** install **Termux** from **F-Droid** (or GitHub releases) — *not*
-the Play Store build, which is unmaintained. Open Termux, then:
+the Play Store build, which is unmaintained. Open Termux, then run the
+**verified install** (fetch → verify → run; never pipe a download into a shell):
 
 ```bash
-# one line — replace `B0LK13` with your GitHub username
-curl -fsSL https://raw.githubusercontent.com/B0LK13/pixel-development/main/pixel-bootstrap.sh \
-  | PIXEL_REPO_BASE=https://raw.githubusercontent.com/B0LK13/pixel-development/main bash
+# 1. Fetch the bootstrap script from an immutable commit URL
+curl -fL -o pixel-bootstrap.sh \
+  "https://raw.githubusercontent.com/B0LK13/pixel-development/c8a5466c31d0a8dc4a461da0d3acc2c7ac487610/pixel-bootstrap.sh"
+
+# 2. Verify it against the pinned SHA-256 (must print: pixel-bootstrap.sh: OK)
+printf '%s  %s\n' \
+  "5bbec677ddfbe5fb853686954743b90637479f26ae1f8487622b4572aa0e6785" \
+  "pixel-bootstrap.sh" | sha256sum -c -
+
+# 3. Run it — pinning the same commit, so the two setup scripts come from the
+#    same immutable ref and match the bootstrap's embedded pins
+PIXEL_REPO_BASE="https://raw.githubusercontent.com/B0LK13/pixel-development/c8a5466c31d0a8dc4a461da0d3acc2c7ac487610" \
+  bash pixel-bootstrap.sh --open-store
 ```
+
+Why the ceremony: the commit-pinned URL is immutable, and the digest proves
+the bytes you run are the bytes that were pinned (see
+[`docs/BOOTSTRAP_TRUST_MODEL.md`](docs/BOOTSTRAP_TRUST_MODEL.md) for the full
+chain). If step 2 prints anything but `pixel-bootstrap.sh: OK`, **do not run
+the script** — delete it. The pinned digest travels with the release notes
+and this README; you can also establish it independently from a clone
+(`git clone … && sha256sum pixel-bootstrap.sh`) — a different channel than the
+raw download. Updates and rollback: every release ships a fresh pin (older
+pins keep working — they install the older, genuine kit); procedure in
+[`docs/BOOTSTRAP_RELEASE_PROCESS.md`](docs/BOOTSTRAP_RELEASE_PROCESS.md).
+Signature verification (once a maintainer key is published):
+`bash scripts/verify-bootstrap-signature.sh --keyring=… --signature=… pixel-bootstrap.sh`.
 
 Prefer to clone?
 
@@ -78,7 +102,7 @@ rootfs. Enter it any time with `devbox`.
 
 **5.1 Install Termux (F-Droid), open it.**
 
-**5.2 Bootstrap.** Run the one-liner (§1) or `bash pixel-bootstrap.sh --open-store`.
+**5.2 Bootstrap.** Run the verified install (§1) or `bash pixel-bootstrap.sh --open-store`.
 Install **Termux:Widget**, then long-press home → Widgets → Termux:Widget → drag it
 on. You now have tappable buttons: `1-Full-Setup … 6-SSH-Info`.
 
@@ -181,19 +205,27 @@ before merging.
 
 ```
 pixel-development/
-├─ pixel-bootstrap.sh
-├─ pixel-dev-setup.sh
-├─ pixel-apps-setup.sh
-├─ pixel-autodev.sh
-├─ tests/run_tests.sh   ← verification gate (syntax, shellcheck, dry-run behaviour)
-├─ .pixel-lab.json      ← stack metadata the autodev runner reads for the test command
+├─ pixel-bootstrap.sh     ← verified install entry point (fetch → verify → run)
+├─ pixel-dev-setup.sh     ← devbox provisioning (pinned by checksum manifest)
+├─ pixel-apps-setup.sh    ← optional apps layer (pinned by checksum manifest)
+├─ pixel-autodev.sh       ← autonomous backlog runner
+├─ scripts/               ← release + verification tooling (build/verify/checksums/ci-local)
+├─ tests/run_tests.sh     ← verification gate (syntax, shellcheck, contracts, clean-clone)
+├─ config/bootstrap-checksums.txt  ← pinned SHA-256 manifest
+├─ docs/                  ← CLI contract, trust model, release + signing docs, audit
+├─ reports/               ← session reports (append-only)
+├─ evidence/              ← generated verification evidence (append-only, see evidence/README.md)
+├─ .github/workflows/     ← CI: suite + release-candidate-check (no push, no secrets)
+├─ VERSION                ← SemVer of the pinned kit
+├─ .pixel-lab.json        ← stack metadata the autodev runner reads for the test command
+├─ .gitattributes         ← LF line-ending policy
 ├─ KICKSTART.md
 ├─ README.md
 ├─ LICENSE
 └─ .gitignore
 ```
 
-Keep the scripts at the repo **root** so the `curl | bash` raw URLs resolve.
+Keep the scripts at the repo **root** so the raw URLs used by the verified install flow (§1) resolve.
 Run the suite yourself with `bash tests/run_tests.sh` — the autodev runner picks
 the same command up from `.pixel-lab.json` when it works tasks in this repo.
 
@@ -217,6 +249,13 @@ smoke test. It is hermetic: no network, no paid agents (stubs are injected via
 and `auto/*` and on every pull request — local tests only, `contents: read`,
 10-minute cap. CI never invokes agents, never pushes, never mutates the repo.
 
+**Local CI parity.** `bash scripts/ci-local.sh` runs the same gates as CI
+(whitespace, checksum lockstep, syntax, shellcheck, full suite) from any
+directory, fail-fast, first failure stops. Harness knobs:
+`PIXEL_TESTS_NO_CLONE=1` skips the nested clean-clone smoke for a fast local
+pass (the default gate and CI always run it); `PIXEL_TEST_TIMINGS=1` prints
+per-test elapsed times to stderr.
+
 **Operating model:**
 
 - Agents never push; **the operator owns merging `auto/*` and all publication.**
@@ -224,8 +263,14 @@ and `auto/*` and on every pull request — local tests only, `contents: read`,
 - `--ssh-port` uses equals syntax only and must be an integer in **1–65535** (`--ssh-port=9022`).
 - `--timeout` defaults to **1200 seconds**; `--max-tasks`, `--max-turns`, `--budget`, and `--timeout` are all validated before anything runs (malformed input = exit 2, no state touched).
 - `--agent` accepts only `claude` or `codex`; `--dry-run` never invokes an agent and needs no agent binary installed.
+- `pixel-bootstrap.sh` verifies network-fetched setup scripts against pinned SHA-256 digests before installing them (fail closed on mismatch); pins live in `config/bootstrap-checksums.txt`.
 - Full flag contract: [`docs/CLI_CONTRACT.md`](docs/CLI_CONTRACT.md).
   Security + portability audit: [`docs/AUTONOMOUS_AUDIT.md`](docs/AUTONOMOUS_AUDIT.md).
+  Release signing: [`docs/RELEASE_SIGNING.md`](docs/RELEASE_SIGNING.md);
+  key lifecycle: [`docs/SIGNING_KEY_LIFECYCLE.md`](docs/SIGNING_KEY_LIFECYCLE.md);
+  remote CI runbook: [`docs/REMOTE_CI_VERIFICATION.md`](docs/REMOTE_CI_VERIFICATION.md).
+  Contributing: [`docs/CONTRIBUTOR_QUICKSTART.md`](docs/CONTRIBUTOR_QUICKSTART.md);
+  operator commands: [`docs/OPERATOR_COMMAND_INDEX.md`](docs/OPERATOR_COMMAND_INDEX.md).
 
 ---
 
