@@ -27,7 +27,7 @@ above it must be evidence/report-only (established session convention).
 All must hold at the PR tip:
 
 - clean working tree;
-- full suite green (`bash tests/run_tests.sh`, current contract: 309/0/0);
+- full suite green (`bash tests/run_tests.sh`, current contract: 327/0/0);
 - `bash scripts/ci-local.sh` exit 0 (whitespace, checksum lockstep, bash -n,
   shellcheck, suite);
 - unsigned bundle verification green (verdict verified-integrity-only);
@@ -94,7 +94,7 @@ Both jobs in `.github/workflows/test.yml` are required for promotion:
 
 | job | what it proves |
 |---|---|
-| `suite` | whitespace/checksum lockstep/action-pin enforcement/syntax/shellcheck + full 326-assertion suite |
+| `suite` | whitespace/checksum lockstep/action-pin enforcement/syntax/shellcheck + full 327-assertion suite |
 | `release-candidate-check` | fixture release build, unsigned + throwaway-signed verification, reproducibility |
 
 Neither job publishes, tags, signs with a real identity, or mutates the repo.

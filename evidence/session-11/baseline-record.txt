@@ -1,0 +1,54 @@
+Session 11 baseline record
+==========================
+Recorded: 2026-07-13T10:54:19Z (UTC)
+
+Mandate
+-------
+Production Signing Architecture (design only). Extend the Sessions 1-10
+governance foundation with architecture, threat model, trust model, key
+lifecycle coverage, CI/CD signing design, artifact integrity (SBOM /
+provenance / SLSA), audit/compliance/monitoring, incident response, disaster
+recovery, and a migration roadmap. Documentation deliverables only:
+no key generation, no secrets, no signing of releases, no publishing,
+no deployment or production-behavior changes.
+
+Starting state
+--------------
+- Branch: auto/session-11-signing-architecture
+- Base: main @ 0508a04 (post-Session-10; local == origin at branch creation)
+- HEAD at record time: 5c9fdf8 (design spec committed, GPG-signed, good signature)
+- Working tree: clean
+- Suite contract: 327 passed / 0 failed / 0 skipped (Session 10 post-merge)
+- Branch protection on main: required checks suite + release-candidate-check
+  (strict), 1 approval, conversation resolution, enforce_admins, no force-push,
+  no deletion, merge commits preserved, required_signatures pending operator gates
+
+Prior art reviewed (extend, do not duplicate)
+---------------------------------------------
+- docs/RELEASE_SIGNING.md .......... signing mechanics + signature policy
+- docs/SIGNING_KEY_LIFECYCLE.md .... custody/rotation/revocation (lacks recovery, destruction)
+- docs/BOOTSTRAP_TRUST_MODEL.md .... install-chain threat model + residual authenticity gap
+- docs/BOOTSTRAP_RELEASE_PROCESS.md  release checklist, tier-2 signing at tag time
+- docs/adr/ADR-BOOTSTRAP-ANCHOR-AUTHENTICITY.md  two-tier anchor model, gpgv decision
+- docs/GITHUB_ACTIONS_PINNING_POLICY.md  CI supply-chain enforcement (session 10)
+- docs/BRANCH_PROMOTION_POLICY.md .. promotion gates (internal count drift: 309 vs 326 vs actual 327)
+- docs/OPERATOR_COMMAND_INDEX.md ... command tables (cross-ref target)
+- docs/superpowers/specs/2026-07-13-production-signing-architecture-design.md
+  (approved design spec, commit 5c9fdf8; tooling contracts = recommendations)
+
+Doc-assertion constraints (tests/run_tests.sh §28)
+--------------------------------------------------
+- RELEASE_SIGNING.md must keep: '--detach-sign --armor', '--require-signature',
+  'never replaces checksum verification'
+- SIGNING_KEY_LIFECYCLE.md must keep: rotation, revocation, compromise, backup,
+  'non-production'; must NOT contain 'PRIVATE KEY-----'
+- SIGNING_KEY_LIFECYCLE.md / RELEASE_SIGNING.md / REMOTE_CI_VERIFICATION.md
+  must not gain pipe-to-shell ('| sh' / '| bash') patterns
+- New docs under docs/ are not asserted; additive edits elsewhere are safe
+
+Boundaries for this session
+---------------------------
+- No production key material, no operational signing, no publishing, no tags
+- Existing guarantees preserved: suite 327/0/0, ci-local exit 0, pin checker 0
+  violations, reproducibility, key-material scan 0, all commits signed
+- Work lands on auto/session-11-signing-architecture; main only via protected PR

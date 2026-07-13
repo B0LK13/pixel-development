@@ -2,8 +2,10 @@
 
 How the operator signs a release bundle offline and how anyone verifies it.
 Companion to `docs/BOOTSTRAP_RELEASE_PROCESS.md` (release mechanics),
-`docs/SIGNING_KEY_LIFECYCLE.md` (key custody), and
-`docs/BOOTSTRAP_TRUST_MODEL.md` (threat model).
+`docs/SIGNING_KEY_LIFECYCLE.md` (key custody),
+`docs/BOOTSTRAP_TRUST_MODEL.md` (threat model),
+`docs/PRODUCTION_SIGNING_ARCHITECTURE.md` (architecture capstone), and
+`docs/SIGNING_RUNBOOKS.md` (operational procedures).
 
 **Boundary:** signing is always operator-owned. Autonomous sessions build the
 bundle and the signing manifest; they never hold a production key, never sign
