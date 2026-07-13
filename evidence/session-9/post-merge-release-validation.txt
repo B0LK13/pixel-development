@@ -1,0 +1,30 @@
+Session 9 post-merge release-validation evidence (merge commit)
+Generated: 2026-07-13T07:04:07Z (UTC)
+Fixture: clean clone of main @ b106b35 (fixture tip b106b35), version 0.0.0
+(reserved CI/fixture version), SOURCE_DATE_EPOCH=1700000000.
+Signing key: throwaway ed25519 generated for this capture, non-production,
+discarded. Paths sanitized (<fixture> = a temporary directory).
+
+== build (SOURCE_DATE_EPOCH=1700000000, version 0.0.0 reserved fixture) ==
+release candidate built: <fixture>/out/pixel-development-0.0.0
+  version: 0.0.0  commit: b106b3539958b5fa8226d445e782ded44705e0d4  artifacts: 4  created_at: 2023-11-14T22:13:20Z
+next: operator reviews, then signs offline (docs/RELEASE_SIGNING.md)
+
+== unsigned verify ==
+  ok   layout (9 core files, no unsafe entries)
+  ok   metadata (schema 1.0, version 0.0.0, commit b106b3539958…, 4 artifacts)
+  ok   signing manifest (bound to version, commit, metadata digest, artifact hashes)
+  note signature: not provided — integrity-only verification
+  ok   checksums + modes (4 artifacts)
+integrity proven; authenticity NOT established (no verified signature)
+verdict: verified-integrity-only
+exit: 0
+
+== signed fixture verify (throwaway ed25519 key, non-production) ==
+  ok   layout (9 core files, no unsafe entries)
+  ok   metadata (schema 1.0, version 0.0.0, commit b106b3539958…, 4 artifacts)
+  ok   signing manifest (bound to version, commit, metadata digest, artifact hashes)
+  ok   signature (detached openpgp over SIGNING-MANIFEST.json)
+  ok   checksums + modes (4 artifacts)
+verdict: verified-signed
+exit: 0
