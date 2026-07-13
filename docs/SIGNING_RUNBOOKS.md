@@ -61,7 +61,11 @@ README pin block).
    time): `gpg --detach-sign --armor -o pixel-bootstrap.sh.sig pixel-bootstrap.sh`.
 4. **Verify** — `bash scripts/verify-release-bundle.sh --bundle=dist/pixel-development-X.Y.Z --signature=dist/pixel-development-X.Y.Z/SIGNING-MANIFEST.json.asc --keyring=pixel-release-signing.gpg --require-signature`
    must print `verified-signed`. Confirm the signer fingerprint matches the
-   registry entry.
+   registry entry. When the anchor signature was produced (step 3, at tag
+   time), verify it too before handoff —
+   `bash scripts/verify-bootstrap-signature.sh --keyring=pixel-release-signing.gpg --signature=pixel-bootstrap.sh.sig pixel-bootstrap.sh`
+   must print `verified-signed`; the bundle verifier does not cover the
+   detached anchor signature.
 5. **Record evidence** — (when built) `record-signing-evidence.sh`; manual
    equivalent: save the verifier transcript and note version, commit, manifest
    SHA-256, signature SHA-256, fingerprint, date in the operator-held record.
