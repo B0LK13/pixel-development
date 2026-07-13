@@ -271,6 +271,9 @@ per-test elapsed times to stderr.
   remote CI runbook: [`docs/REMOTE_CI_VERIFICATION.md`](docs/REMOTE_CI_VERIFICATION.md).
   Contributing: [`docs/CONTRIBUTOR_QUICKSTART.md`](docs/CONTRIBUTOR_QUICKSTART.md);
   operator commands: [`docs/OPERATOR_COMMAND_INDEX.md`](docs/OPERATOR_COMMAND_INDEX.md).
+  CI governance: [`docs/GITHUB_ACTIONS_PINNING_POLICY.md`](docs/GITHUB_ACTIONS_PINNING_POLICY.md);
+  branch promotion: [`docs/BRANCH_PROMOTION_POLICY.md`](docs/BRANCH_PROMOTION_POLICY.md);
+  main protection: [`docs/MAIN_BRANCH_PROTECTION.md`](docs/MAIN_BRANCH_PROTECTION.md).
 
 ---
 

@@ -91,7 +91,7 @@ Both jobs in `.github/workflows/test.yml` are required for promotion:
 
 | job | what it proves |
 |---|---|
-| `suite` | whitespace/checksum lockstep/syntax/shellcheck + full 309-assertion suite |
+| `suite` | whitespace/checksum lockstep/action-pin enforcement/syntax/shellcheck + full 326-assertion suite |
 | `release-candidate-check` | fixture release build, unsigned + throwaway-signed verification, reproducibility |
 
 Neither job publishes, tags, signs with a real identity, or mutates the repo.
