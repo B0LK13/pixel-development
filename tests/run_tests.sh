@@ -998,6 +998,14 @@ done
 if grep -qF "branches: [main, 'auto/*']" "$WF"; then
   t_ok "workflow triggers cover main + auto/* integration branches"
 else t_fail "workflow triggers" "branch pattern changed"; fi
+# Every checkout must fetch full history: the anchor-pin tests (§18/§28) and
+# the clean-clone smoke (§8) need pinned-commit objects and ancestry, which a
+# default depth-1 checkout lacks (session 9: all three failures on the first
+# remote run traced to this).
+if [ "$(grep -c 'actions/checkout@v4' "$WF")" -ge 1 ] \
+   && [ "$(grep -c 'actions/checkout@v4' "$WF")" -eq "$(grep -c 'fetch-depth: 0' "$WF")" ]; then
+  t_ok "workflow checkouts fetch full history (fetch-depth: 0)"
+else t_fail "workflow checkout depth" "checkout steps without fetch-depth: 0"; fi
 if grep -qE '\$\{\{ *secrets\.' "$WF" || grep -qE '\b(claude|codex)( |$)' "$WF"; then
   t_fail "workflow references a paid agent or a secret"
 else
