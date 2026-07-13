@@ -33,9 +33,11 @@ Everything else provides integrity or process correctness.
 - **Signs**: commits. Purpose: authorship and audit trail — the session chain
   is evidence (`BRANCH_PROMOTION_POLICY.md` §3).
 - **Compromise impact**: forged commits. Contained by branch protection
-  (required checks, approval, conversation resolution, enforce_admins) — a
-  forged commit still cannot merge unreviewed, and *never* implies release
-  trust.
+  (required checks, required verified signatures, conversation resolution,
+  enforce_admins — approvals are 0 in single-maintainer mode,
+  `MAIN_BRANCH_PROTECTION.md` §7) and by the absence of auto-merge: a forged
+  commit can merge only through an explicit operator merge action, and it
+  *never* implies release trust.
 - **Never**: signs releases, anchors, or manifests.
 
 ### D2 — CI signing

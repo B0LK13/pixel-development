@@ -164,7 +164,14 @@ conditions are recorded in the design spec §13 and the roadmap
 (`docs/SIGNING_ROADMAP.md`). This section exists so the evaluation never has
 to be repeated from scratch.
 
-### 5.3 Least-privilege invariants for CI (test-enforced)
+### 5.3 Least-privilege invariants for CI
+
+Items 1–4 hold of the current workflow (`.github/workflows/test.yml`) by
+construction — its header contract is "no agents, no secrets, no pushes, no
+repository mutation" and the only signing step uses a per-run throwaway
+fixture key. Dedicated harness assertions for items 1–2 are a build-session
+recommendation (design spec §12), not yet part of the suite; the
+action-pin gate is test-enforced today.
 
 1. No workflow may reference a signing secret or a private-key variable.
 2. No workflow step may invoke `gpg --detach-sign` outside fixture mode.
