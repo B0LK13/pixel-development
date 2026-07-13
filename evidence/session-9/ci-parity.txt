@@ -1,7 +1,7 @@
 == session-9 ci parity ==
-date: 2026-07-12T22:06:01+00:00
+date: 2026-07-13T06:12:12+00:00
 branch: auto/integrate-session-8
-commit: dce1b36a81abf5aac90a475b7bd2806e6a1c1908
+commit: 71de27a66a0ec0fc0248405106acfdadb6b2e618
 command: bash scripts/ci-local.sh
 
 
@@ -248,6 +248,7 @@ checksum manifest is current (3 artifacts, embedded digests in lockstep)
   ok    CI parity: gate in workflow AND ci-local.sh: bash scripts/update-bootstrap-checksums.sh --check
   ok    CI parity: gate in workflow AND ci-local.sh: bash tests/run_tests.sh
   ok    workflow triggers cover main + auto/* integration branches
+  ok    workflow checkouts fetch full history (fetch-depth: 0)
   ok    workflow invokes no paid agent and uses no secret context
   ok    ci-local.sh preserves failing step exit status and cds to repo root
   ok    workflow: release-candidate-check job exists with a bounded timeout
@@ -335,7 +336,7 @@ checksum manifest is current (3 artifacts, embedded digests in lockstep)
   ok    README §10 repo layout lists all release-relevant directories
   ok    docs reference release scripts by their scripts/ path
 
-passed: 309   failed: 0   skipped: 0
+passed: 310   failed: 0   skipped: 0
 
 ci-local: ALL GATES PASSED
 

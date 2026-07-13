@@ -222,6 +222,7 @@
   ok    CI parity: gate in workflow AND ci-local.sh: bash scripts/update-bootstrap-checksums.sh --check
   ok    CI parity: gate in workflow AND ci-local.sh: bash tests/run_tests.sh
   ok    workflow triggers cover main + auto/* integration branches
+  ok    workflow checkouts fetch full history (fetch-depth: 0)
   ok    workflow invokes no paid agent and uses no secret context
   ok    ci-local.sh preserves failing step exit status and cds to repo root
   ok    workflow: release-candidate-check job exists with a bounded timeout
@@ -309,4 +310,4 @@
   ok    README §10 repo layout lists all release-relevant directories
   ok    docs reference release scripts by their scripts/ path
 
-passed: 309   failed: 0   skipped: 0
+passed: 310   failed: 0   skipped: 0
