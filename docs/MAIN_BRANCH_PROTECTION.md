@@ -3,8 +3,9 @@
 Recommended branch-protection configuration for `main`, formalizing the
 recommendations in `docs/BRANCH_PROMOTION_POLICY.md` §6. Applying these
 settings is an outward-facing repository change and remains
-**operator-owned** — session 10 documents but does not apply them without
-explicit authorization.
+**operator-owned**: session 10 applied them with explicit operator
+authorization on 2026-07-13 (§6), and any later change likewise requires
+explicit operator authorization.
 
 ## 1. Required status checks
 
@@ -65,7 +66,7 @@ gh api -X PUT repos/B0LK13/pixel-development/branches/main/protection \
   -F 'required_status_checks[checks][][context]=suite' \
   -F 'required_status_checks[checks][][context]=release-candidate-check' \
   -F enforce_admins=true \
-  -F required_pull_request_reviews[required_approving_review_count]=1 \
+  -F required_pull_request_reviews[required_approving_review_count]=0 \
   -F required_pull_request_reviews[require_last_push_approval]=false \
   -F required_conversation_resolution=true \
   -F required_linear_history=false \
@@ -77,7 +78,9 @@ gh api -X PUT repos/B0LK13/pixel-development/branches/main/protection \
 gh api -X POST repos/B0LK13/pixel-development/branches/main/protection/required_signatures
 ```
 
-Adjust `enforce_admins` and the signed-commit endpoint only by explicit
+The approval count is `0` under the Single-Maintainer Operating Mode
+(§7); raise it to ≥1 only per the §7 restoration conditions. Adjust
+`enforce_admins` and the signed-commit endpoint only by explicit
 operator decision. Note: required signatures reject any commit GitHub
 cannot verify against a known key — ensure the operator's signing key is
 registered with GitHub first (`gh api users/<user>/gpg_keys`), or web-flow
