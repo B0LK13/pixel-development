@@ -988,7 +988,7 @@ CIL="$ROOT/scripts/ci-local.sh"
 if ! grep -q "$(printf '\t')" "$WF" && grep -q 'contents: read' "$WF"; then
   t_ok "workflow: valid-YAML hygiene (no tabs), least-privilege permissions"
 else t_fail "workflow hygiene" "tabs or permissions regressed"; fi
-for gate in 'git diff --check' 'bash scripts/update-bootstrap-checksums.sh --check' 'bash tests/run_tests.sh'; do
+for gate in 'git diff --check' 'bash scripts/update-bootstrap-checksums.sh --check' 'python3 scripts/check-github-action-pins.py' 'bash tests/run_tests.sh'; do
   if grep -qF "run: $gate" "$WF" && grep -qF "$gate" "$CIL"; then
     t_ok "CI parity: gate in workflow AND ci-local.sh: $gate"
   else
@@ -1001,9 +1001,10 @@ else t_fail "workflow triggers" "branch pattern changed"; fi
 # Every checkout must fetch full history: the anchor-pin tests (§18/§28) and
 # the clean-clone smoke (§8) need pinned-commit objects and ancestry, which a
 # default depth-1 checkout lacks (session 9: all three failures on the first
-# remote run traced to this).
-if [ "$(grep -c 'actions/checkout@v4' "$WF")" -ge 1 ] \
-   && [ "$(grep -c 'actions/checkout@v4' "$WF")" -eq "$(grep -c 'fetch-depth: 0' "$WF")" ]; then
+# remote run traced to this). Session 10: checkouts are SHA-pinned
+# (docs/GITHUB_ACTIONS_PINNING_POLICY.md), so count the pinned `uses:` form.
+if [ "$(grep -c 'uses: actions/checkout@' "$WF")" -ge 1 ] \
+   && [ "$(grep -c 'uses: actions/checkout@' "$WF")" -eq "$(grep -c 'fetch-depth: 0' "$WF")" ]; then
   t_ok "workflow checkouts fetch full history (fetch-depth: 0)"
 else t_fail "workflow checkout depth" "checkout steps without fetch-depth: 0"; fi
 if grep -qE '\$\{\{ *secrets\.' "$WF" || grep -qE '\b(claude|codex)( |$)' "$WF"; then
@@ -1654,6 +1655,74 @@ if [ -z "$bare" ]; then
 else
   t_fail "bare script reference in docs" "$bare"
 fi
+
+# --- 30. GitHub Actions pinning policy (session 10) ------------------------------
+# Static enforcement of docs/GITHUB_ACTIONS_PINNING_POLICY.md: every external
+# action reference must pin a full 40-char commit SHA with a "# vX.Y.Z"
+# release comment. Fixture trees live under $tmp; the checker takes --root.
+PINC="$ROOT/scripts/check-github-action-pins.py"
+PINDOC="$ROOT/docs/GITHUB_ACTIONS_PINNING_POLICY.md"
+SHA7=9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+if command -v python3 >/dev/null 2>&1; then
+  # 30a. the repository's own workflows comply
+  if out="$(python3 "$PINC" 2>&1)"; then
+    t_ok "action-pin checker: repository workflows comply"
+  else t_fail "action-pin checker on repository" "$out"; fi
+  pinfx(){ d="$(mktemp -d "$tmp/pinfx.XXXXXX")"; mkdir -p "$d/.github/workflows"
+    printf '%s\n' "$2" > "$d/.github/workflows/$1.yml"; printf '%s' "$d"; }
+  # 30b. accepts: SHA+comment, local action, nested path, external reusable
+  #      workflow, docker digest
+  d="$(pinfx ok "on: push
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@$SHA7 # v7.0.0
+      - uses: ./.github/actions/local
+      - uses: octo/tool/subdir@$SHA7 # v1.2.3
+      - uses: octo/wf/.github/workflows/ci.yml@$SHA7 # v2.0.0
+      - uses: docker://alpine@sha256:$(printf 'a%.0s' {1..64})")"
+  if python3 "$PINC" --root "$d" >/dev/null 2>&1; then
+    t_ok "pin checker accepts: SHA pin, local, nested path, reusable workflow, docker digest"
+  else t_fail "pin checker false-positive on valid refs"; fi
+  # 30c. rejections — every mutable or malformed form must exit non-zero
+  pin_reject(){
+    d="$(pinfx bad "on: push
+jobs:
+  a:
+    steps:
+      - $2")"
+    if python3 "$PINC" --root "$d" >/dev/null 2>&1; then
+      t_fail "pin checker accepted bad ref: $1"
+    else t_ok "pin checker rejects: $1"; fi
+  }
+  pin_reject "major tag @v4" "uses: actions/checkout@v4"
+  pin_reject "short SHA" "uses: actions/checkout@9c091bb # v7.0.0"
+  pin_reject "@main" "uses: actions/checkout@main"
+  pin_reject "@master" "uses: actions/setup-node@master"
+  pin_reject "@latest" "uses: actions/checkout@latest"
+  pin_reject "SHA without version comment" "uses: actions/checkout@$SHA7"
+  pin_reject "missing @ref" "uses: actions/checkout"
+  pin_reject "reusable workflow @v1" "uses: octo/wf/.github/workflows/ci.yml@v1"
+  pin_reject "docker :latest" "uses: docker://alpine:latest"
+  # 30d. commented-out uses lines are ignored
+  d="$(pinfx commented "# uses: actions/checkout@v4
+on: push")"
+  if python3 "$PINC" --root "$d" >/dev/null 2>&1; then
+    t_ok "pin checker ignores commented-out uses lines"
+  else t_fail "pin checker flags commented-out lines"; fi
+else
+  t_fail "python3 missing" "required for scripts/check-github-action-pins.py (docs/CONTRIBUTOR_QUICKSTART.md)"
+fi
+# 30e. the pinning policy doc exists and points at the checker
+if [ -f "$PINDOC" ] && grep -qF 'check-github-action-pins.py' "$PINDOC" \
+   && grep -qF '40-character' "$PINDOC"; then
+  t_ok "GITHUB_ACTIONS_PINNING_POLICY.md: SHA rule + checker documented"
+else t_fail "pinning policy doc" "missing or incomplete"; fi
+# 30f. verification-only checkouts never persist the workflow token
+if [ "$(grep -c 'uses: actions/checkout@' "$WF")" -ge 1 ] \
+   && [ "$(grep -c 'persist-credentials: false' "$WF")" -eq "$(grep -c 'uses: actions/checkout@' "$WF")" ]; then
+  t_ok "workflow checkouts disable credential persistence (verification-only)"
+else t_fail "checkout credential persistence" "persist-credentials: false missing"; fi
 
 # --- summary ---------------------------------------------------------------------
 echo
