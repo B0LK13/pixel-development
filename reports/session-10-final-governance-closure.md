@@ -66,8 +66,12 @@ verification evidence):
 | Test suite | 327 passed / 0 failed / 0 skipped | `evidence/session-10/pre-commit-gate-summary.txt` |
 | ci-local parity | rc=0, ALL GATES PASSED | `evidence/session-10/pre-commit-ci-local.txt` |
 
-A second complete gate run on the committed tree is recorded in the PR
-body (log: `/tmp/s10pm/final-ci-local.txt`).
+A second complete gate run on the committed tree (`5a9825b`,
+2026-07-13T17:19:16Z → 17:41:40Z) is recorded in
+`evidence/session-10/closure-gate-5a9825b-summary.txt` and
+`evidence/session-10/final-ci-local.txt`: 327 passed / 0 failed /
+0 skipped, ci-local exit 0, 0 pin violations, diff-check clean,
+worktree clean.
 
 ## Recovery actions (2026-07-13, closure run)
 

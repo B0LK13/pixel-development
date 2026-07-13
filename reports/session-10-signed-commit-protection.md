@@ -12,9 +12,9 @@ Status: COMPLETE — signatures enforced on `main`, evidence consolidated into P
 | Type | ed25519, created 2026-06-25, expires 2028-06-24, capability [SCA] |
 | UID | Wesley Bolk &lt;wesley@bolk.dev&gt; (ultimate, local keyring) |
 | GitHub registration | yes — registered by the operator via GitHub Settings → SSH and GPG keys on 2026-07-13 (~14:30Z) |
-| GitHub verification | yes — commit `2e0e04346b3ae797c211fbe311afa0ecda626ff5` reads `verified: true, reason: valid` (`verified_at` 2026-07-13T14:34:02Z) |
-| Registration confirmation path | `GET /repos/.../commits/2e0e043...` verification block. Note: `GET /user/gpg_keys` returns 404 for the automation token (`repo` scope only; the read endpoint also requires `admin:gpg_key`). The commit-verification API is the authoritative recognition check and passes. |
-| Private key exported | no — public-key-only export, `PRIVATE KEY\|SECRET KEY` grep clean before every use |
+| GitHub verification | yes — commit `2e0e04346b3ae797c211fbe311afa0ecda626ff5`: REST read `verified: true, reason: valid` at 2026-07-13T14:34:02Z. The same REST endpoint can later return `verification: null` for the automation token (endpoint variability), so the token-independent source is authoritative: GraphQL `signature { isValid: true, state: VALID, keyId: 0F8A4FD173240A4B, signer: B0LK13 }`, re-confirmed 2026-07-13 |
+| Registration confirmation path | GraphQL commit-signature state (authoritative, token-independent — see above). `GET /user/gpg_keys` returns 404 for the automation token (`repo` scope only; the read endpoint also requires `admin:gpg_key`); the REST commit-verification block passed at registration time but varies by token |
+| Private key exported | no — public-key-only export; grep for `PRIVATE KEY` / `SECRET KEY` clean before every use |
 | Temporary export | `/tmp/github-signing-public-key.asc` deleted 2026-07-13 (~14:36Z) after registration + verification + enforcement all confirmed; absence verified (`test ! -e`) |
 
 ## Protection update

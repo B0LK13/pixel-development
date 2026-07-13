@@ -1,0 +1,23 @@
+== session-10 protection-verification correction ==
+date: 2026-07-13T19:25:00Z
+re: evidence/session-10/protection-verification.txt lines 50-56
+    ("protected-flow exercise")
+
+Per evidence/README.md (append-only; corrections land as new dated
+files), the original record is preserved verbatim. It is identical to
+the version on PR #3's retained branch
+(auto/session-10-protection-evidence @ b8fd2c7) for auditability, and
+must remain so.
+
+Correction: PR #3 was closed unmerged by operator decision on
+2026-07-13T15:42:57Z. The evidence reached PR #4 via the signed
+cherry-pick 4c48e87 and reaches main through PR #4
+(auto/session-10-signed-commit-evidence), not through PR #3. The
+governance state the original text described (required checks, signed
+commits, enforce_admins, no force-push) remained intact throughout.
+On 2026-07-13 the operator adopted the single-maintainer policy
+(required approvals 1 -> 0; all other branch-protection controls
+verified unchanged by deep diff, see
+/tmp/s10pm/main-protection-{before,after}-single-maintainer.json on the
+operating host), so PR #4 merges without independent approval. Policy
+documentation follows in the single-maintainer governance PR.
