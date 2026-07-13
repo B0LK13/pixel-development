@@ -1,0 +1,23 @@
+== key-material scan ==
+method: grep -rIl -E '-----BEGIN [A-Z ]*PRIVATE KEY' (actual key blocks)
+files containing private-key blocks: 0 (expected 0)
+note: a naive 'PRIVATE KEY-----' substring scan matches exactly one file —
+tests/run_tests.sh line ~1588, the §28b anti-leak guard pattern itself,
+not key material.
+
+== commit signatures over 0d13047..HEAD ==
+2e0e043 G Merge branch 'auto/session-10-actions-hardening' — GitHub Actions pinning and main-protection readiness (session 10)
+ae2e88c G docs: correct branch-protection runbook and tag-dereference caveat
+393f176 G fix(ci): close quoted-key evasion in pin checker, align message prefix
+1767b83 G docs: record session 10 remote CI verification and final report
+d27f1c9 G docs: record session 10 action hardening evidence and reports
+f831002 G docs(governance): define main branch protection requirements
+c64d5e9 G chore(deps): configure controlled GitHub Actions updates
+a2402fd G ci: pin workflow actions to immutable commits with static enforcement
+cf1fc9d G docs(ci): define immutable GitHub Actions pinning policy
+
+== git diff --check ==
+clean
+
+== status ==
+(end)

@@ -1,0 +1,9 @@
+== session-10 merge record ==
+date: 2026-07-13T08:47:16Z (PR auto-closed MERGED)
+pr: #2 (Harden GitHub Actions pins and main-branch protections)
+source: auto/session-10-actions-hardening @ ae2e88c
+target: main (pre-merge 0d13047)
+strategy: --no-ff merge commit (local CLI, then push)
+merge commit: 2e0e04346b3ae797c211fbe311afa0ecda626ff5 (GPG-signed)
+merge tree == source tip tree: yes (git diff ae2e88c 2e0e043 empty)
+squash: no  rebase: no  force: no

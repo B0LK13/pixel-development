@@ -1,0 +1,15 @@
+Session 10 reproducibility evidence
+Generated: 2026-07-13T08:45:54Z (UTC)
+Two independent unsigned builds from the same commit (2e0e04346b3ae797c211fbe311afa0ecda626ff5),
+SOURCE_DATE_EPOCH=1700000000. Build exit codes: 0 / 0.
+
+$ diff -r A B
+(no differences)
+
+$ compare mode+mtime+path listings
+IDENTICAL
+
+$ compare per-file sha256 listings
+IDENTICAL
+
+CONCLUSION: byte-for-byte reproducible when SOURCE_DATE_EPOCH is fixed.
