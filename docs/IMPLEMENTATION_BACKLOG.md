@@ -103,7 +103,7 @@ lockstep. *Acceptance*: AC-B2 item 5.
 
 ### B3 — Evidence plane
 
-**RT-08 evidence convention** — `evidence/releases/<version>/signing-evidence.json`
+**RT-08 evidence convention** — `evidence/releases/<version>/SIGNING-EVIDENCE.json`
 public subsets; CI re-verifies committed subsets against the referenced
 release commits (attestational drift detector; capstone §7.2, design spec §8).
 *Acceptance*: AC-B3 items 1–3. *Note*: no subset exists before B4 — the CI

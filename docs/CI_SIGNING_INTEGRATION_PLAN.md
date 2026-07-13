@@ -73,7 +73,7 @@ step with protocol-driven steps (design sketch — **not applied**):
             --bundle=dist/pixel-development-0.0.0 \
             --signature=dist/pixel-development-0.0.0/SIGNING-MANIFEST.json.asc \
             --expect-fingerprint="$FP" --evidence-out="$RUNNER_TEMP/evidence"
-          grep -q '"verdict": "verified-signed"' "$RUNNER_TEMP/evidence/signing-evidence.json"
+          grep -q '"verdict": "verified-signed"' "$RUNNER_TEMP/evidence/SIGNING-EVIDENCE.json"
 ```
 
 Rationale for replacement rather than addition: `record-signing-evidence.sh`
@@ -108,7 +108,7 @@ New step after the dry-run:
         run: bash scripts/verify-release-evidence.sh --all   # RT-08; passes vacuously when evidence/releases/ is empty
 ```
 
-For each `evidence/releases/<version>/signing-evidence.json`: check out the
+For each `evidence/releases/<version>/SIGNING-EVIDENCE.json`: check out the
 referenced commit into a temp worktree, rebuild with the recorded epoch,
 re-verify against the committed keyring reference, and compare digests.
 Attestational only (capstone §7.2): failure blocks promotion but never

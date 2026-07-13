@@ -19,6 +19,11 @@ no release-behavior changes.
   path" requirement produces valid links; `main` @ `0508a04` remains the
   closest main ancestor. Promotion order when the operator merges: Session
   11, then Session 12.
+- Publication update (2026-07-13, append-only): Session 11 has since merged
+  (PR #6, merge commit `8cba29a`), and this branch was brought up to date
+  with `main` by signed merge for PR #7 — no rebase, no history rewrite.
+  The bullets above record the session-start state and remain the
+  historical baseline for this report.
 
 ## 2. Deliverables (by file path)
 

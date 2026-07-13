@@ -35,9 +35,9 @@ forward references below:
 | `scripts/prepare-signing-session.sh` | build artifact | RT-01 (contract: design spec §6.2) |
 | `scripts/record-signing-evidence.sh` | build artifact | RT-02 (contract: design spec §6.2) |
 | `scripts/verify-release-evidence.sh` | build artifact | RT-08 (contract: AC-B3 items 1–3) |
-| `evidence/releases/<version>/signing-evidence.json` | template path (placeholder) | B3 convention; first real subset in B4 (RT-12) |
+| `evidence/releases/<version>/SIGNING-EVIDENCE.json` | template path (placeholder) | B3 convention; first real subset in B4 (RT-12) |
 | `reports/session-12-implementation-review.md` | this report | committed this session |
-| `$RUNNER_TEMP/evidence/signing-evidence.json` (CI plan YAML sketch) | runner temp path, not a repo path | n/a — scan artifact |
+| `$RUNNER_TEMP/evidence/SIGNING-EVIDENCE.json` (CI plan YAML sketch) | runner temp path, not a repo path | n/a — scan artifact |
 
 All forward references are framed in their documents as
 recommendations/contracts, never as existing files. Session 11 section

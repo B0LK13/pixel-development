@@ -45,7 +45,7 @@ B1–B3 are ordinary development work (the "build session" recommended in
 | B1 | `scripts/prepare-signing-session.sh`, `scripts/record-signing-evidence.sh` | `tests/run_tests.sh` (new sections), `docs/OPERATOR_COMMAND_INDEX.md`, `docs/RELEASE_SIGNING.md` §3 (pointer only) |
 | B2 | — | `.github/workflows/test.yml` (fixture dry-run step in `release-candidate-check`), `scripts/ci-local.sh` (new gates), `tests/run_tests.sh` (enforcement + parity) |
 | B3 | `evidence/releases/` (convention; empty until B4), operator registry template doc | `.github/workflows/test.yml` (subset re-verification step), `docs/SIGNING_KEY_LIFECYCLE.md` §3 (template pointer) |
-| B4 | `evidence/releases/<version>/signing-evidence.json` (first real subset) | `docs/BOOTSTRAP_RELEASE_PROCESS.md` §3 (checklist integration), README §1 (tier-2 co-primary block) |
+| B4 | `evidence/releases/<version>/SIGNING-EVIDENCE.json` (first real subset) | `docs/BOOTSTRAP_RELEASE_PROCESS.md` §3 (checklist integration), README §1 (tier-2 co-primary block) |
 | B5 | SBOM artifact (generated), provenance statement (design-dependent) | release process docs as needed |
 
 Every modified file has harness coverage to respect: §16 lockstep, §18 README

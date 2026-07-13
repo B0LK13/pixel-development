@@ -70,3 +70,10 @@ Boundaries for this session
   0 violations; all commits GPG-signed; repository left clean
 - Work lands on auto/session-12-release-trust-blueprint; main only via the
   protected PR path after operator review
+
+Publication update (2026-07-13, append-only)
+--------------------------------------------
+Session 11 merged as PR #6 (merge commit 8cba29a). This branch was brought
+up to date with current main by signed merge for PR #7 (no rebase, no
+history rewrite). The baseline recorded above describes the session-start
+state and remains authoritative for the session record.

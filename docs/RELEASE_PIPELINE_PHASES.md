@@ -85,7 +85,7 @@ entry/exit criteria. "Pipeline" means the release path in
   rehearsal first (RT-12: re-sign the current release) → README tier-2
   co-primary (RT-13).
 - **Outputs**: first `verified-signed` release; first real
-  `evidence/releases/<version>/signing-evidence.json`; README co-primary
+  `evidence/releases/<version>/SIGNING-EVIDENCE.json`; README co-primary
   block.
 - **Gates**: all prior gates + `verified-signed` from an independent
   machine + evidence re-verification no longer vacuous + harness §18 pin
