@@ -1,0 +1,29 @@
+Session 11 local gate results
+=============================
+Recorded: 2026-07-13 (UTC), branch auto/session-11-signing-architecture
+Tip at verification: 539d866 (report commit follows)
+
+bash tests/run_tests.sh
+  run 1 (at ae00997): 325 passed / 2 failed / 0 skipped
+    - bare script reference in docs (harness §29b)
+    - clean-clone smoke (§8, cascade of the same root cause)
+  run 2 (at 539d866, after the §29b fix): 327 passed / 0 failed / 0 skipped
+    exit 0 · duration ~9m06s
+
+bash scripts/ci-local.sh (at 539d866)
+  ci-local: ALL GATES PASSED · exit 0 · duration ~9m18s
+  (includes whitespace, checksum lockstep, bash -n, shellcheck,
+   action-pin gate, and the full 327-assertion suite)
+
+python3 scripts/check-github-action-pins.py (at 539d866)
+  1 workflow file(s), 2 uses ref(s), 0 violation(s) · exit 0
+
+Notes
+-----
+- The two first-run failures had one root cause: three doc lines in the
+  Session 11 document set referenced release scripts by bare backticked
+  name instead of their scripts/ path. Fixed in 539d866; no test was
+  weakened, skipped, or marked continue-on-error.
+- Durations are measurements only, not performance claims.
+- Documentation-only session: no workflow, script, or CI behavior changed;
+  the gates above verify that existing guarantees are preserved.
