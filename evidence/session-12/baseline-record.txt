@@ -1,0 +1,72 @@
+Session 12 baseline record
+==========================
+Recorded: 2026-07-13 (UTC)
+
+Mandate
+-------
+Release Trust Implementation Blueprint (design only). Convert the Session 11
+production signing architecture into an execution-ready implementation
+program: repository changes, CI/CD integration design, release pipeline
+phases, signing workflow sequencing, SBOM/provenance integration points,
+verification workflow, validation gates, key-management integration points
+(design only), rollback/recovery, migration strategy, operator checkpoints,
+implementation backlog with dependencies/priorities, and acceptance criteria
+for every phase. No implementation: no keys, no secrets, no KMS, no workflow
+modifications, no signing enablement, no publishing, no release-behavior
+changes. Session 10 governance watcher (cron a6f0cb42) is independent and
+must not be modified.
+
+Branch decision (documented per mandate "starting state")
+---------------------------------------------------------
+- Mandate: "Use the current main branch as the authoritative baseline and
+  create a new feature branch for Session 12."
+- Session 11 is complete but NOT merged: auto/session-11-signing-architecture
+  @ 6ac93e4, a linear docs-only chain directly on main @ 0508a04.
+- Decision: branch auto/session-12-release-trust-blueprint from the Session 11
+  tip (6ac93e4). Rationale: the mandate requires referencing the Session 11
+  architecture by file path; branching from raw main would make every such
+  reference a broken link until Session 11 merges. main remains the
+  authoritative baseline in substance (0508a04 is the closest main ancestor).
+- Merge order when the operator promotes: Session 11 first, then Session 12
+  (both docs-only; no conflicts expected).
+
+Starting state
+--------------
+- Branch: auto/session-12-release-trust-blueprint
+- Base: 6ac93e4 (Session 11 tip; main @ 0508a04)
+- Working tree: clean
+- Suite contract: 327 passed / 0 failed / 0 skipped
+- Prior verification: evidence/session-11/local-gate-results.txt
+
+Session 11 architecture referenced (by path, not duplicated)
+------------------------------------------------------------
+- docs/PRODUCTION_SIGNING_ARCHITECTURE.md (capstone; §4.1 signing targets,
+  §5 CI/CD design, §6 artifact integrity/SLSA, §12 reconciliation)
+- docs/SIGNING_TRUST_MODEL.md (D1/D2/D3 domains, separation rules)
+- docs/SIGNING_THREAT_MODEL.md (threats T1-T9/S1-S9, gap register G1-G7)
+- docs/SIGNING_RUNBOOKS.md (ceremonies, incident + DR procedures)
+- docs/SIGNING_ROADMAP.md (phases 0-3, deferred options, DR plan)
+- docs/SIGNING_KEY_LIFECYCLE.md (sections 1-11)
+- docs/superpowers/specs/2026-07-13-production-signing-architecture-design.md
+  (protocol contracts, evidence schema v1, test plan — the build source)
+
+Doc-assertion constraints (tests/run_tests.sh; learned in Session 11)
+---------------------------------------------------------------------
+- §29b: docs + README must reference release scripts by their scripts/ path,
+  never a bare backticked name: scripts/verify-release-bundle.sh,
+  scripts/build-release-candidate.sh, scripts/update-bootstrap-checksums.sh,
+  scripts/verify-bootstrap-signature.sh, scripts/ci-local.sh
+- §28a/§28b: RELEASE_SIGNING.md and SIGNING_KEY_LIFECYCLE.md contract strings
+  must be preserved; no 'PRIVATE KEY-----'
+- §28d: no pipe-to-shell patterns in the three release docs (kept everywhere)
+- New docs under docs/ are not asserted; additive edits elsewhere are safe
+
+Boundaries for this session
+---------------------------
+- Design/documentation only; no production signing, release, deployment, or
+  secret configuration; no weakening of governance, CI, branch protection,
+  or security controls
+- Existing guarantees preserved: suite 327/0/0, ci-local exit 0, pin checker
+  0 violations; all commits GPG-signed; repository left clean
+- Work lands on auto/session-12-release-trust-blueprint; main only via the
+  protected PR path after operator review
