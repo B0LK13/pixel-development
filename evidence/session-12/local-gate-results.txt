@@ -1,0 +1,27 @@
+Session 12 local gate results
+=============================
+Recorded: 2026-07-13 (UTC), branch auto/session-12-release-trust-blueprint
+Tip at verification: c251257 (report commits follow, evidence/report-only)
+
+bash tests/run_tests.sh
+  327 passed / 0 failed / 0 skipped · exit 0 · duration ~9m18s
+
+bash scripts/ci-local.sh
+  ci-local: ALL GATES PASSED · exit 0 · duration ~9m58s
+  (whitespace, checksum lockstep, action-pin gate, bash -n, shellcheck,
+   full 327-assertion suite)
+
+python3 scripts/check-github-action-pins.py
+  1 workflow file(s), 2 uses ref(s), 0 violation(s) · exit 0
+
+Notes
+-----
+- Documentation-only session: no script, workflow, or CI behavior changed;
+  the gates verify that existing guarantees are preserved with the six new
+  blueprint documents and two reports added.
+- Cross-reference scan of the new documents: all paths resolve except six
+  intended forward references (build-session artifacts RT-01/RT-02/RT-08,
+  the evidence/releases/ template path, this session's review report, and
+  one runner-temp path in a design sketch) — see
+  reports/session-12-implementation-review.md §2.
+- Durations are measurements only, not performance claims.

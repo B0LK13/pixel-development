@@ -45,4 +45,5 @@ exit codes are normative in `docs/CLI_CONTRACT.md` and
 
 Canonical docs: `docs/CLI_CONTRACT.md` · `docs/RELEASE_SIGNING.md` ·
 `docs/BOOTSTRAP_RELEASE_PROCESS.md` · `docs/REMOTE_CI_VERIFICATION.md` ·
-`docs/SIGNING_KEY_LIFECYCLE.md`
+`docs/SIGNING_KEY_LIFECYCLE.md` · `docs/PRODUCTION_SIGNING_ARCHITECTURE.md` ·
+`docs/SIGNING_RUNBOOKS.md`

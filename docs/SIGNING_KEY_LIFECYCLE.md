@@ -5,8 +5,10 @@ prescribes **no** key material and creates none; the repository contains only
 throwaway test fixtures. Every step below is operator-owned — autonomous
 sessions must not generate, import, store, or use production keys.
 
-Companion to `docs/RELEASE_SIGNING.md` (signing mechanics) and
-`docs/BOOTSTRAP_RELEASE_PROCESS.md` §4 (tier-2 signing at tag time).
+Companion to `docs/RELEASE_SIGNING.md` (signing mechanics),
+`docs/BOOTSTRAP_RELEASE_PROCESS.md` §4 (tier-2 signing at tag time),
+`docs/PRODUCTION_SIGNING_ARCHITECTURE.md` (architecture capstone), and
+`docs/SIGNING_RUNBOOKS.md` (operational procedures).
 
 ---
 
@@ -97,3 +99,44 @@ Companion to `docs/RELEASE_SIGNING.md` (signing mechanics) and
 - No automatic signing — a human operator runs the sign command.
 - Signature verification precedes trusting signed hashes; checksum
   verification always follows (see `docs/RELEASE_SIGNING.md` §5).
+
+## 10. Recovery
+
+Recovering use of the key when there is **no** compromise indication
+(compromise follows §6 and `docs/SIGNING_RUNBOOKS.md` §5):
+
+- **Subkey lost, backup exists**: restore the encrypted backup on the offline
+  machine; verify the fingerprint against the durable record created at
+  generation (§1); sign and verify a scratch file before returning the key to
+  custody. A backup that fails a restore test is treated as no backup.
+- **Primary lost, backup exists**: restore offline the same way; the signing
+  subkey keeps working in the meantime; rotate the subkey afterwards as
+  hygiene.
+- **All backups lost (key still in custody)**: immediately create fresh
+  encrypted backups and a fresh revocation certificate, and restore-test them.
+- **Key lost entirely (no backups)**: permanent loss — provision a new
+  identity per §1, announce out-of-band (no old-key transition note is
+  possible), re-sign the current release, and note the gap in the release
+  notes. The old public key stays in the keyring history (§8).
+- **Forgotten passphrase**: treated as key loss. There is no recovery path by
+  design — never weaken the passphrase policy to recover convenience.
+
+Record every recovery event (what, when, which backup, restore-test result)
+in the operator-held log. Recovery never relaxes §9: offline handling and
+passphrase protection apply throughout.
+
+## 11. Destruction
+
+- **When**: an identity is retired after its rotation window closes (§5),
+  media is decommissioned, or a compromised identity is cleaned up after
+  revocation (§6).
+- **How**: destroy all private key material — delete working copies
+  (`gpg --delete-secret-keys`) and securely wipe or physically destroy the
+  storage media. When retiring early (before natural expiry), revoke first,
+  then destroy, so a rediscovered backup cannot be misused.
+- **Retain forever**: the **public** key stays in the verification keyring
+  history so old releases remain verifiable (§8); the destruction event
+  (date, identity, method) is recorded in the operator-held log.
+- **Fixture keys**: throwaway test keys are destroyed with their temp
+  directories at the end of every test run — this is already the harness
+  convention and needs no ceremony.
