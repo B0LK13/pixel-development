@@ -54,7 +54,10 @@ Capture current settings first:
 gh api repos/B0LK13/pixel-development/branches/main/protection
 ```
 
-Apply (classic branch protection via the REST API):
+Apply (classic branch protection via the REST API). Signed-commit
+enforcement is a **separate endpoint** — the `PUT .../protection` body has
+no `required_signatures` field
+([REST docs](https://docs.github.com/en/rest/branches/branch-protection)):
 
 ```sh
 gh api -X PUT repos/B0LK13/pixel-development/branches/main/protection \
@@ -65,17 +68,20 @@ gh api -X PUT repos/B0LK13/pixel-development/branches/main/protection \
   -F required_pull_request_reviews[required_approving_review_count]=1 \
   -F required_pull_request_reviews[require_last_push_approval]=false \
   -F required_conversation_resolution=true \
-  -F required_signatures=true \
   -F required_linear_history=false \
   -F allow_force_pushes=false \
   -F allow_deletions=false \
   -F restrictions=null
+
+# signed-commit requirement — separate endpoint, after protection exists:
+gh api -X POST repos/B0LK13/pixel-development/branches/main/protection/required_signatures
 ```
 
-Adjust `enforce_admins` and `required_signatures` only by explicit
-operator decision. Note: `required_signatures=true` rejects any commit
-GitHub cannot verify against a known key — ensure the operator's signing
-key is registered with GitHub first, or web-flow merges will fail.
+Adjust `enforce_admins` and the signed-commit endpoint only by explicit
+operator decision. Note: required signatures reject any commit GitHub
+cannot verify against a known key — ensure the operator's signing key is
+registered with GitHub first (`gh api users/<user>/gpg_keys`), or web-flow
+merges will fail.
 
 ## 4. Verification after applying
 

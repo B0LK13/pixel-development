@@ -32,7 +32,7 @@ exit codes are normative in `docs/CLI_CONTRACT.md` and
 | task | command | success signal |
 |------|---------|----------------|
 | enforce workflow action pins | `python3 scripts/check-github-action-pins.py` | exit 0, `0 violation(s)` — policy: `docs/GITHUB_ACTIONS_PINNING_POLICY.md` |
-| update a pinned action | map tag→SHA (`gh api repos/OWNER/REPO/git/refs/tags/vX.Y.Z --jq .object.sha`), update SHA + `# vX.Y.Z` comment together | pin checker + full gate green (policy §7) |
+| update a pinned action | map tag→SHA (`gh api repos/OWNER/REPO/git/refs/tags/vX.Y.Z --jq .object.sha`; for **annotated** tags this returns the tag object — dereference via `gh api repos/OWNER/REPO/git/tags/<tag-object-sha> --jq .object.sha`), update SHA + `# vX.Y.Z` comment together | pin checker + full gate green (policy §7) |
 | review action update PRs | Dependabot opens weekly grouped PRs (`.github/dependabot.yml`) | operator review + green remote gate; never auto-merged |
 
 ## Exit-code legend
