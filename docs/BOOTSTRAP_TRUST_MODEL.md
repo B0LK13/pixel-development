@@ -6,7 +6,9 @@ Lab Kit. This document is the threat model behind the install flow in
 checksum lifecycle in `scripts/update-bootstrap-checksums.sh`, and the
 architecture decision in `docs/adr/ADR-BOOTSTRAP-ANCHOR-AUTHENTICITY.md`.
 
-Status: current as of `auto/integrate-session-5`. Normative behavior is
+Status: current as of `auto/integrate-session-5`; the signing side is extended
+by Session 11 (`docs/SIGNING_TRUST_MODEL.md`, `docs/SIGNING_THREAT_MODEL.md`,
+`docs/PRODUCTION_SIGNING_ARCHITECTURE.md`). Normative behavior is
 enforced by `tests/run_tests.sh` (sections 16–21); this prose explains *why*.
 
 ---
