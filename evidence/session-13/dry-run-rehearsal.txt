@@ -1,0 +1,105 @@
+== session-13 dry-run rehearsal ==
+date: 2026-07-13T17:58:00Z .. 2026-07-13T17:59:05Z
+branch: auto/session-13-release-dry-run-prep
+commit: 6494af7d0e4191db60302bc19b827254ba898735 (runbook commit)
+command: bash /tmp/s13-rehearsal.sh — executes docs/RELEASE_DRY_RUN.md
+  steps 0-7 verbatim from the repository root (dry-run commands only;
+  no tags, no push, no network). All throwaway state under
+  WORK=/tmp/pixel-dry-run.IrPILP, destroyed at step 7.
+result: ALL EXPECTATIONS MET — verified-signed observed; all five
+  negative scenarios fail closed with the expected verdicts.
+
+### 1. throwaway identity (two ed25519 keys, no passphrase, 1d expiry)
+gpg: revocation certificate stored as '.../openpgp-revocs.d/BE45A369D2209FAEC1F16FE6CD1345D7A7A35427.rev'
+[gen-key rc=0]
+pub   ed25519 2026-07-13 [SC] [expires: 2026-07-14]
+      BE45 A369 D220 9FAE C1F1  6FE6 CD13 45D7 A7A3 5427
+uid           [ultimate] Pixel THROWAWAY Dry Run (NOT PRODUCTION) <throwaway-dry-run@example.invalid>
+throwaway fingerprint: BE45A369D2209FAEC1F16FE6CD1345D7A7A35427
+(second key "Pixel THROWAWAY Wrong Key" generated for DR-1b; [rc=0])
+note: fingerprint is ephemeral — the identity was destroyed at step 7;
+  it is recorded here only to show the provisioning step's output shape.
+
+### 2. build (SOURCE_DATE_EPOCH pinned) + rebuild-compare
+release candidate built: /tmp/pixel-dry-run.IrPILP/dist/pixel-development-1.0.0
+  version: 1.0.0  commit: 6494af7d0e4191db60302bc19b827254ba898735  artifacts: 4  created_at: 2026-07-13T17:58:00Z
+[rc=0]
+rebuild diff: byte-identical (0 lines)
+
+### 3. sign manifest (throwaway key)
+gpg --batch --yes --local-user throwaway-dry-run@example.invalid \
+    --detach-sign --armor --output .../SIGNING-MANIFEST.json.asc .../SIGNING-MANIFEST.json
+[rc=0]
+
+### 4a. verify unsigned (integrity-only)
+  ok   layout (9 core files, no unsafe entries)
+  ok   metadata (schema 1.0, version 1.0.0, commit 6494af7d0e41…, 4 artifacts)
+  ok   signing manifest (bound to version, commit, metadata digest, artifact hashes)
+  note signature: present but NOT verified (no --keyring) — integrity-only
+  ok   checksums + modes (4 artifacts)
+verdict: verified-integrity-only
+[rc=0]
+
+### 4b. verify signed (require-signature) — target verdict
+  ok   layout (9 core files, no unsafe entries)
+  ok   metadata (schema 1.0, version 1.0.0, commit 6494af7d0e41…, 4 artifacts)
+  ok   signing manifest (bound to version, commit, metadata digest, artifact hashes)
+  ok   signature (detached openpgp over SIGNING-MANIFEST.json)
+  ok   checksums + modes (4 artifacts)
+verdict: verified-signed
+[rc=0]
+
+### 6-DR1a. wrong artifact: genuine signature over the wrong file
+verify-release-bundle: signature verification FAILED — do not trust this bundle
+verdict: failed-signature
+[rc=1]
+
+### 6-DR1b. wrong keyring: genuine signature, wrong public key
+verify-release-bundle: signature verification FAILED — do not trust this bundle
+verdict: failed-signature
+[rc=1]
+
+### 6-DR2a. tampered bundle: altered artifact (pixel-bootstrap.sh + "x\n")
+verify-release-bundle: digest mismatch: pixel-bootstrap.sh
+verdict: failed-checksum
+[rc=1]
+
+### 6-DR2b. tampered bundle: altered signed manifest
+verify-release-bundle: signature verification FAILED — do not trust this bundle
+verdict: failed-signature
+[rc=1]
+
+### 6-DR2c. tampered bundle: altered metadata (created_at)
+verify-release-bundle: signing manifest does not match RELEASE-METADATA.json (metadata altered?)
+verdict: failed-metadata
+[rc=1]
+
+### 6-DR3. lost key (destructive, runs last)
+gpg --batch --yes --delete-secret-keys BE45A369D2209FAEC1F16FE6CD1345D7A7A35427
+[delete rc=0]
+list-secret-keys "throwaway-dry-run@example.invalid" after delete: [] (empty)
+gpg: skipped "throwaway-dry-run@example.invalid": No secret key
+gpg: signing failed: No secret key
+[sign-after-loss rc=2]
+previously signed bundle, same exported keyring:
+  ok   checksums + modes (4 artifacts)
+verdict: verified-signed
+[rc=0]
+
+### 7. destroy throwaway identity
+gpgconf --homedir "$GNUPGHOME" --kill all; rm -rf "$WORK"
+scratch root destroyed
+[repo tree after rehearsal: 0 uncommitted lines]
+
+== divergence found and fixed during rehearsal ==
+First rehearsal pass (commit 607d734) ran the lost-key scenario FIRST
+(roadmap list order). Two defects exposed:
+  1. DR "wrong artifact" then could not re-sign (secret key already
+     deleted; the failure was silenced by 2>/dev/null), so the copied
+     original signature verified and the scenario returned a FALSE
+     verified-signed. Fix: destructive lost-key scenario runs LAST;
+     the runbook says so explicitly (docs/RELEASE_DRY_RUN.md §6).
+  2. `gpg --list-secret-keys` after deletion still listed the second
+     throwaway key, contradicting the documented expectation. Fix:
+     expectation narrowed to `gpg --list-secret-keys "$KEYID"` → empty.
+Second pass (this file, commit 6494af7) is clean end to end.

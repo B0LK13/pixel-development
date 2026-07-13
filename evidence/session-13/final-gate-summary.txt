@@ -1,0 +1,45 @@
+== session-13 final gate record ==
+branch=auto/session-13-release-dry-run-prep
+convention: one block per gate; raw logs are kept out of the repository
+  (/tmp/s10pm/s13-*.txt) per evidence/README.md bounded-output policy;
+  durable in-repo evidence: evidence/session-13/baseline-record.txt,
+  evidence/session-13/dry-run-rehearsal.txt
+
+[gate 1 — pre-finalization]
+commit=9af937243e549049c4f5b94188e5736ea2f74042
+gate_started=2026-07-13T18:03:29Z
+gate_finished=2026-07-13T18:23:06Z
+duration=19m37s
+suite_result=pass
+suite_count=327 passed / 0 failed / 0 skipped
+ci_local_exit=0 (ALL GATES PASSED)
+pin_check=0 violations (1 workflow file, 2 uses refs)
+diff_check=clean
+key_material_scan=0 markers (docs/RELEASE_DRY_RUN.md,
+  reports/session-13-final-report.md, evidence/session-13/)
+commit_signatures=all 3 authoring commits G (0F8A4FD173240A4B)
+working_tree=clean
+
+[gate 2 — final committed-tree confirmation]
+commit=72e86ab04220049860658ca5f9247da4d8d469c3
+gate_started=2026-07-13T18:29:11Z
+gate_finished=2026-07-13T18:51:08Z
+duration=21m57s
+suite_result=pass
+suite_count=327 passed / 0 failed / 0 skipped
+ci_local_exit=0 (ALL GATES PASSED)
+pin_check=0 violations (1 workflow file, 2 uses refs)
+diff_check=clean
+key_material_scan=0 markers (branch diff main..72e86ab and the five
+  changed files)
+commit_signatures=all 4 commits G (0F8A4FD173240A4B): 6494af7,
+  7877ee3, 9af9372, 72e86ab
+unsigned_integrity=covered by suite (bundle verifier, unsigned fixture)
+signed_fixture=covered by suite (signed fixture + failure injection)
+reproducibility=covered by suite (byte-identical rebuild check)
+working_tree=clean
+
+note=gate 2 ran on the finalization commit 72e86ab; this summary file was
+  then extended in the evidence-only follow-up commit b833ae0 (the branch
+  tip at publication). The tested tree and the branch tip differ only by
+  this summary file; no code, script, or workflow changed after gate 2.
