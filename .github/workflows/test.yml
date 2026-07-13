@@ -26,6 +26,10 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        with:
+          # full history: §18/§28 anchor-pin tests + §8 clean-clone need
+          # pinned-commit objects and ancestry (default depth-1 breaks them)
+          fetch-depth: 0
       - name: Install shellcheck
         run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
       - name: Whitespace / conflict-marker gate
@@ -46,6 +50,10 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        with:
+          # full history: §18/§28 anchor-pin tests + §8 clean-clone need
+          # pinned-commit objects and ancestry (default depth-1 breaks them)
+          fetch-depth: 0
       - name: Build fixture release candidate
         run: SOURCE_DATE_EPOCH=0 bash scripts/build-release-candidate.sh --version=0.0.0 --output-dir="$RUNNER_TEMP/rc"
       - name: Verify unsigned bundle (integrity-only)
