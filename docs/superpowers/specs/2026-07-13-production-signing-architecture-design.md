@@ -283,7 +283,7 @@ release as soon as the signing path is restored.
 
 | Phase | Owner | Content | Gate | Rollback |
 |---|---|---|---|---|
-| 0 | autonomous (Session 11) | this spec, tooling with fixture mode, CI dry-run, enforcement tests, capstone doc | full suite + `ci-local.sh` + remote CI green; zero production material | normal PR revert |
+| 0 | autonomous (Session 11) | this spec, tooling with fixture mode, CI dry-run, enforcement tests, capstone doc | full suite + `scripts/ci-local.sh` + remote CI green; zero production material | normal PR revert |
 | 1 | operator | provision the release key (lifecycle §1–2); record fingerprint in the operator registry; publish public key + keyring via the independent channel | operator confirms publication | stop; nothing in the repo asserts the key |
 | 2 | operator | first signed release: prepare → sign → record; commit public evidence subset; publish release with signature + keyring | independent-machine verification returns `verified-signed` | integrity-only release remains valid (§7 lifecycle) |
 | 3 | operator, optional | document `--require-signature` as the default expectation for official releases after successful signed releases | operator approval | revert docs; emergency path stays documented |
@@ -302,7 +302,7 @@ plus script-local precondition errors:
 |---|---|
 | dirty working tree / wrong `HEAD` / version mismatch (prepare) | exit 1, naming the cause; nothing built |
 | missing `git` / `gpg` / `sha256sum` | abort naming the tool — never skip-verify |
-| build failure | propagate `build-release-candidate.sh`'s exit; no partial-output claims |
+| build failure | propagate `scripts/build-release-candidate.sh`'s exit; no partial-output claims |
 | signature absent / invalid / wrong keyring (record) | exit 1 with the verifier's verdict; no evidence written |
 | signer fingerprint ≠ `--expect-fingerprint` | exit 1, `failed-policy`; no evidence written |
 | tampered artifact or metadata | `failed-checksum` / `failed-metadata`; no evidence written |

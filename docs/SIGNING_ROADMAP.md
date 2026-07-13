@@ -12,7 +12,7 @@ specified in `docs/PRODUCTION_SIGNING_ARCHITECTURE.md`.
 
 - Tier-1 install integrity (commit pin + SHA-256) is the documented default.
 - Signature mechanics are implemented and fixture-tested
-  (`verify-bootstrap-signature.sh`, `verify-release-bundle.sh` signed mode).
+  (`scripts/verify-bootstrap-signature.sh`, `scripts/verify-release-bundle.sh` signed mode).
 - Policy set complete; Session 11 added architecture, trust/threat models,
   runbooks, and key-lifecycle recovery/destruction coverage.
 - No production release-signing key exists; no signed release has shipped.
