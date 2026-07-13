@@ -1,0 +1,56 @@
+== session-10 branch-protection application record ==
+date: 2026-07-13T08:54:23Z
+target: repos/B0LK13/pixel-development/branches/main/protection
+authorization: operator, 2026-07-13 — apply WITHOUT required_signatures
+  (local signing key 0F8A4FD173240A4B unregistered on GitHub;
+   session commits verify as unknown_key; signed-commit enforcement
+   deferred until the operator registers the key, then
+   POST .../protection/required_signatures per the runbook)
+
+== before (GET, 2026-07-13T08:50Z) ==
+{"status":"none"}
+
+== applied (PUT body) ==
+{
+  "required_status_checks": {
+    "strict": true,
+    "checks": [
+      { "context": "suite" },
+      { "context": "release-candidate-check" }
+    ]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 1,
+    "require_last_push_approval": false,
+    "dismiss_stale_reviews": true
+  },
+  "restrictions": null,
+  "required_linear_history": false,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "block_creations": false,
+  "required_conversation_resolution": true,
+  "lock_branch": false,
+  "allow_fork_syncing": false
+}
+
+== after (GET, read-only verification) ==
+{"url":"https://api.github.com/repos/B0LK13/pixel-development/branches/main/protection","required_status_checks":{"url":"https://api.github.com/repos/B0LK13/pixel-development/branches/main/protection/required_status_checks","strict":true,"contexts":["suite","release-candidate-check"],"contexts_url":"https://api.github.com/repos/B0LK13/pixel-development/branches/main/protection/required_status_checks/contexts","checks":[{"context":"suite","app_id":15368},{"context":"release-candidate-check","app_id":15368}]},"required_pull_request_reviews":{"url":"https://api.github.com/repos/B0LK13/pixel-development/branches/main/protection/required_pull_request_reviews","dismiss_stale_reviews":true,"require_code_owner_reviews":false,"require_last_push_approval":false,"required_approving_review_count":1},"required_signatures":{"url":"https://api.github.com/repos/B0LK13/pixel-development/branches/main/protection/required_signatures","enabled":false},"enforce_admins":{"url":"https://api.github.com/repos/B0LK13/pixel-development/branches/main/protection/enforce_admins","enabled":true},"required_linear_history":{"enabled":false},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false},"block_creations":{"enabled":false},"required_conversation_resolution":{"enabled":true},"lock_branch":{"enabled":false},"allow_fork_syncing":{"enabled":false}}
+== verification checklist (from the GET above) ==
+required checks: suite + release-candidate-check — yes
+strict (up-to-date branch required): true
+enforce_admins: true
+required approvals: 1
+conversation resolution: true
+required_linear_history: false (merge commits preserved)
+allow_force_pushes: false
+allow_deletions: false
+required_signatures: false (authorized deviation, see above)
+
+== protected-flow exercise ==
+this file reaches main through PR #3 (docs-only), opened after
+protection was applied: PR creation, required-check gating, and
+merge-commit availability are exercised on it. The merge itself
+awaits operator approval (author self-approval does not count;
+enforce_admins disables bypass) — the intended governance state.
