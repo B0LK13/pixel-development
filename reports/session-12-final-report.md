@@ -125,7 +125,7 @@ supply-chain controls unweakened; all commits GPG-signed.
 - `d902c89` release pipeline phases
 - `2d5294c` release acceptance criteria
 - `c251257` rollback and recovery plan
-- review report, gate evidence, this report (evidence/report-only, on top of verified tip `c251257`) review report, gate evidence, this report
+- review report, gate evidence, this report (evidence/report-only, on top of verified tip `c251257`)
 
 ## 9. Status
 
