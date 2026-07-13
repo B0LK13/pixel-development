@@ -27,6 +27,14 @@ exit codes are normative in `docs/CLI_CONTRACT.md` and
 | local CI parity | `bash scripts/ci-local.sh` | same gates as `.github/workflows/test.yml`, fail-fast |
 | inspect a remote CI run | `gh run list --branch <branch>`, `gh run watch <run-id>` | runbook: `docs/REMOTE_CI_VERIFICATION.md` |
 
+## Audit CI supply chain
+
+| task | command | success signal |
+|------|---------|----------------|
+| enforce workflow action pins | `python3 scripts/check-github-action-pins.py` | exit 0, `0 violation(s)` — policy: `docs/GITHUB_ACTIONS_PINNING_POLICY.md` |
+| update a pinned action | map tag→SHA (`gh api repos/OWNER/REPO/git/refs/tags/vX.Y.Z --jq .object.sha`; for **annotated** tags this returns the tag object — dereference via `gh api repos/OWNER/REPO/git/tags/<tag-object-sha> --jq .object.sha`), update SHA + `# vX.Y.Z` comment together | pin checker + full gate green (policy §7) |
+| review action update PRs | Dependabot opens weekly grouped PRs (`.github/dependabot.yml`) | operator review + green remote gate; never auto-merged |
+
 ## Exit-code legend
 
 | code | meaning |

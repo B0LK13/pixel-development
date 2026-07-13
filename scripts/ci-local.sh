@@ -6,9 +6,10 @@
 #  secrets, no paid agents, and no repository mutation:                       #
 #    1. git diff --check                        (whitespace/conflict markers) #
 #    2. bash scripts/update-bootstrap-checksums.sh --check  (checksum gate)   #
-#    3. bash -n on every tracked shell script   (syntax)                      #
-#    4. shellcheck -S warning on every tracked shell script (skip if absent)  #
-#    5. bash tests/run_tests.sh                 (full hermetic suite)         #
+#    3. python3 scripts/check-github-action-pins.py  (workflow pin policy)    #
+#    4. bash -n on every tracked shell script   (syntax)                      #
+#    5. shellcheck -S warning on every tracked shell script (skip if absent)  #
+#    6. bash tests/run_tests.sh                 (full hermetic suite)         #
 #                                                                             #
 #  Runnable from any directory. Fail-fast: the first failing gate stops the   #
 #  run and its own exit status becomes this script's exit status.             #
@@ -18,7 +19,7 @@
 set -uo pipefail
 
 for a in "$@"; do case "$a" in
-  --help|-h) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  --help|-h) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "ci-local: unknown argument: $a (try --help)" >&2; exit 2 ;;
 esac; done
 
@@ -33,15 +34,25 @@ ok(){ printf '   ok %s\n' "$1"; }
 
 shells="$(git ls-files | grep -E '\.sh$')"
 
-step 1/5 "whitespace + conflict markers — git diff --check"
+step 1/6 "whitespace + conflict markers — git diff --check"
 git diff --check || fail "git diff --check" $?
 ok "git diff --check"
 
-step 2/5 "checksum manifest lockstep — update-bootstrap-checksums.sh --check"
+step 2/6 "checksum manifest lockstep — update-bootstrap-checksums.sh --check"
 bash scripts/update-bootstrap-checksums.sh --check || fail "checksum --check" $?
 ok "checksum --check"
 
-step 3/5 "shell syntax — bash -n (every tracked shell script)"
+step 3/6 "GitHub Action pins — check-github-action-pins.py"
+# security gate, not a lint nicety: no self-skip — python3 is a documented
+# prerequisite (docs/CONTRIBUTOR_QUICKSTART.md)
+if command -v python3 >/dev/null 2>&1; then
+  python3 scripts/check-github-action-pins.py || fail "action pin check" $?
+  ok "action pins"
+else
+  fail "python3 not installed (required for the GitHub Action pin gate)" 1
+fi
+
+step 4/6 "shell syntax — bash -n (every tracked shell script)"
 n=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
@@ -52,7 +63,7 @@ $shells
 EOF
 ok "bash -n ($n scripts)"
 
-step 4/5 "shellcheck -S warning (every tracked shell script)"
+step 5/6 "shellcheck -S warning (every tracked shell script)"
 if command -v shellcheck >/dev/null 2>&1; then
   set --
   while IFS= read -r f; do
@@ -66,7 +77,7 @@ else
   echo "   skipped — shellcheck not installed (CI installs it; harness gate also self-skips)"
 fi
 
-step 5/5 "full test suite — bash tests/run_tests.sh"
+step 6/6 "full test suite — bash tests/run_tests.sh"
 bash tests/run_tests.sh || fail "tests/run_tests.sh" $?
 
 printf '\nci-local: ALL GATES PASSED\n'

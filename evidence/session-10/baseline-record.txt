@@ -1,0 +1,29 @@
+== session-10 baseline record ==
+date: 2026-07-13 (UTC)
+branch: auto/session-10-actions-hardening (from main @ 0d13047)
+
+starting state (Phase 1):
+  HEAD: 0d130472c42b2b84fad8a978d177f635c154844d (main, origin/main synchronized)
+  working tree: clean
+  b106b35 (Sessions 1-9 merge) ancestor: yes
+  78e8261 (verified integration tip) ancestor: yes
+
+baseline gate (Phase 2, on the session branch before any modification):
+  bash tests/run_tests.sh: 310 passed / 0 failed / 0 skipped, rc=0 (508s)
+  bash scripts/ci-local.sh: ALL GATES PASSED, rc=0 (521s)
+    (first wrapper attempt invoked ./ci-local.sh at the repo root — wrong
+    path, rc=127; the canonical path is scripts/ci-local.sh, rerun above)
+  git diff --check: clean
+  git status --short: clean
+
+inventory (Phase 3):
+  one workflow: .github/workflows/test.yml (jobs: suite, release-candidate-check)
+  external actions: actions/checkout@v4 x2 (only references in the repo)
+  no third-party/local/reusable/container/composite actions
+
+upstream resolution (Phase 5):
+  selected: actions/checkout v7.0.0 (node24; resolves node20 deprecation)
+  tag -> commit: 9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 (lightweight tag)
+  fetch-depth: 0 semantics unchanged; persist-credentials: false adopted
+
+durations are this-host measurements; no performance claim is made.

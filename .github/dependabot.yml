@@ -1,0 +1,21 @@
+# Controlled GitHub Actions updates — docs/GITHUB_ACTIONS_PINNING_POLICY.md §8.
+# Dependabot bumps SHA-pinned actions to the new release commit and updates
+# the trailing "# vX.Y.Z" comment in the same PR. No automatic merging:
+# every update PR requires operator review and a green remote gate.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: UTC
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"

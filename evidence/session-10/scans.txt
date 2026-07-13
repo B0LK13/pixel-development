@@ -1,0 +1,18 @@
+== key-material scan ==
+method: grep -rIl -E '-----BEGIN [A-Z ]*PRIVATE KEY' (actual key blocks)
+files containing private-key blocks: 0 (expected 0)
+note: a naive 'PRIVATE KEY-----' substring scan matches exactly one file —
+tests/run_tests.sh line 1588, the §28b anti-leak guard pattern itself
+('! grep -q PRIVATE KEY----- KEY_DOC'), not key material.
+
+== commit signatures over 0d13047..HEAD ==
+f831002 G docs(governance): define main branch protection requirements
+c64d5e9 G chore(deps): configure controlled GitHub Actions updates
+a2402fd G ci: pin workflow actions to immutable commits with static enforcement
+cf1fc9d G docs(ci): define immutable GitHub Actions pinning policy
+
+== git diff --check ==
+clean
+
+== status ==
+(end)

@@ -10,6 +10,9 @@ the kit on a Pixel phone, start at the README instead.
   `scripts/verify-release-bundle.sh`); the product scripts cope with 3.2
   modulo the GNU-isms documented in `docs/AUTONOMOUS_AUDIT.md`
 - **git**
+- **python3** — for the GitHub Actions pin gate
+  (`scripts/check-github-action-pins.py`, stdlib only; preinstalled on
+  GitHub runners)
 - optional: **shellcheck** (the lint gate self-skips when absent), **jq**
   (JSON checks degrade to a skip)
 
@@ -20,7 +23,8 @@ the kit on a Pixel phone, start at the README instead.
 | `bash tests/run_tests.sh` | the full hermetic suite — the only sanctioned gate; ends with a clean-clone smoke |
 | `PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh` | fast local pass (dev convenience; never the final gate) |
 | `PIXEL_TEST_TIMINGS=1 bash tests/run_tests.sh` | per-test elapsed times on stderr |
-| `bash scripts/ci-local.sh` | the CI gate chain locally: whitespace, checksum lockstep, syntax, shellcheck, full suite — fail-fast |
+| `bash scripts/ci-local.sh` | the CI gate chain locally: whitespace, checksum lockstep, action pins, syntax, shellcheck, full suite — fail-fast |
+| `python3 scripts/check-github-action-pins.py` | enforce the workflow pinning policy (`docs/GITHUB_ACTIONS_PINNING_POLICY.md`): every external action SHA-pinned with a version comment |
 
 ## Editing a checksummed script
 
