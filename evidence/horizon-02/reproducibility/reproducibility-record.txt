@@ -1,0 +1,106 @@
+== Horizon 0.2 reproducibility record (Agent B — build & reproducibility) ==
+date (UTC): 2026-07-13T21:18Z .. 2026-07-13T21:22Z
+branch: auto/horizon-02-reproducibility (worktree, never the primary tree)
+base commit: cc5c0d3b8f3e3e6fe9cea0e09f1b0d06e23debbf
+  ("docs(horizon-02): initialize release-readiness integration workstream")
+procedure: docs/RELEASE_DRY_RUN.md §2 (canonical build path) —
+  SOURCE_DATE_EPOCH-pinned build via scripts/build-release-candidate.sh,
+  rebuilt from the same clean state, compared per the runbook pattern.
+scratch: /tmp/h02-repro-scratch/{a,b} (ephemeral, destroyed after the run);
+  raw logs: /tmp/h02/repro/ (host-only, not committed).
+tools: git 2.51.0 · GNU bash 5.2.37 · GNU coreutils 9.5 (sha256sum)
+  · aarch64 Linux. No network, no signing operations, no suite runs.
+
+### 1. build commands (runbook §2 verbatim form)
+
+SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" = 1783977357
+  (= 2026-07-13T21:15:57Z, the base-commit committer time)
+
+build A:
+  SOURCE_DATE_EPOCH=1783977357 \
+    bash scripts/build-release-candidate.sh --version=1.0.0 \
+    --output-dir=<scratch>/a/dist
+  -> exit 0, "release candidate built: .../pixel-development-1.0.0",
+     commit cc5c0d3b…, artifacts: 4, created_at 2026-07-13T21:15:57Z,
+     duration 3s
+build B (same clean worktree state, same epoch, second isolated root):
+  SOURCE_DATE_EPOCH=1783977357 \
+    bash scripts/build-release-candidate.sh --version=1.0.0 \
+    --output-dir=<scratch>/b/dist
+  -> exit 0, identical banner, duration 2s
+worktree git status --porcelain: empty before, between, and after both
+  builds (the builder writes only under --output-dir).
+
+### 2. bundle inventory (both bundles; identical lists)
+
+9 files + the bundle root directory, one directory level:
+  INSTALL.md                 RELEASE-METADATA.json        SHA256SUMS
+  SIGNING-MANIFEST.json      VERIFY.md                    bootstrap-checksums.txt
+  pixel-apps-setup.sh        pixel-bootstrap.sh           pixel-dev-setup.sh
+file count A=9 B=9; directory count A=1 B=1; sorted `find .` lists: identical.
+Note: the builder emits a directory bundle (no tar archive); the
+ordering-sensitive outputs are therefore the sorted file listing, the
+SHA256SUMS line order, and the JSON artifact-array order — all compared
+byte-for-byte below and identical.
+
+### 3. comparison method and result (runbook §2 pattern, plus sizes/mtimes)
+
+method                          result
+------------------------------  -----------------
+diff -r A B (contents)          IDENTICAL (no output)
+find -printf '%m %p' | sort     IDENTICAL (no output)
+find -printf '%s %p' | sort     IDENTICAL (no output)
+find -type f sha256sum|sort -k2 IDENTICAL (no output)
+find -printf '%T@ %p' | sort    IDENTICAL (all mtimes = 1783977357.0000000000,
+                                i.e. SOURCE_DATE_EPOCH-normalized)
+cmp SIGNING-MANIFEST.json       IDENTICAL
+cmp RELEASE-METADATA.json       IDENTICAL
+
+modes (both): 0755 scripts (pixel-bootstrap/pixel-dev-setup/
+  pixel-apps-setup), 0644 all other files, 0755 bundle root.
+sizes (both, bytes): bootstrap-checksums.txt 1330 · INSTALL.md 1002 ·
+  pixel-apps-setup.sh 13957 · pixel-bootstrap.sh 10368 ·
+  pixel-dev-setup.sh 13841 · RELEASE-METADATA.json 988 · SHA256SUMS 346 ·
+  SIGNING-MANIFEST.json 828 · VERIFY.md 684.
+
+digests (both, sha256):
+  65441a20ed05999f395b48e76757254ea70c037ca14181349c5b0fce0c79ea71  bootstrap-checksums.txt
+  0e2edf9cff315a485fc94b9bcccff7194db55af1279aa25f89089c1679464eef  INSTALL.md
+  b7a341135e1abeb10004e28d8ea3505e758feef288556595339f6162e0179019  pixel-apps-setup.sh
+  55b73f896e7cda9c52beaa60f150e5eba205bb69b18ee73399182e6a372f1138  pixel-bootstrap.sh
+  444e59fb0e125f70c4c7b4ad03f7e6e8dd52b0af0ad7d71a41357abee310abc6  pixel-dev-setup.sh
+  e2199606e8f0d6587de4b04f182299ccd1ea518ff2baa4530ecbdde4d92a715c  RELEASE-METADATA.json
+  8670a0e22789e52c9892510e90b1cc0c98f0d34a17f84a555401541f11c2c3f8  SHA256SUMS
+  a36721e6a75f9bcb2d59ce4463668fa268580bc0da089f9326b543f8b7f1f6e1  SIGNING-MANIFEST.json
+  16a5eead1536e071892363737e625d725f580835561edfe732bda550948a9541  VERIFY.md
+
+manifest/metadata field notes: both pin commit cc5c0d3b8f3e3e6fe9cea0e09f1b0d06e23debbf;
+  RELEASE-METADATA.json created_at = 2026-07-13T21:15:57Z (epoch-derived,
+  not wall clock); SIGNING-MANIFEST.json release_metadata_sha256 =
+  e2199606e8f0d6587de4b04f182299ccd1ea518ff2baa4530ecbdde4d92a715c, matching
+  the metadata file digest — binding intact in both bundles.
+
+### 4. builder precondition checks (documented gates behave)
+
+Executed in a disposable scratch clone of the base commit (removed after
+the check; the real worktree was never dirtied):
+  T1 malformed version (--version=1.0): exit 2,
+     "malformed version: 1.0 (want strict SemVer X.Y.Z, e.g. 1.0.0)"
+  T2 malformed SOURCE_DATE_EPOCH (notanumber): exit 1,
+     "SOURCE_DATE_EPOCH must be unix seconds"
+  T3 dirty tree (one untracked marker file): exit 1,
+     "working tree is not clean — commit or stash first:" naming the file
+  T4 atomicity: no output directory created by any failed invocation.
+
+### 5. sanity (read-only, no suite runs)
+
+  ( cd bundle-A && sha256sum -c SHA256SUMS ): 4/4 OK
+  scripts/verify-release-bundle.sh --bundle=bundle-A:
+    verdict: verified-integrity-only (exit 0)
+
+### 6. result
+
+BYTE-FOR-BYTE IDENTICAL: yes — contents, file names/counts, modes, sizes,
+SHA-256 digests, mtimes, manifest and metadata bytes, and all ordering-
+sensitive outputs. No nondeterminism observed; no differing field exists
+to classify. Build tooling was not modified.
