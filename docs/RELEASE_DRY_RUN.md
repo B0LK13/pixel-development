@@ -30,6 +30,12 @@ Do not improvise a workaround; record the divergence and hand it back.
 Run from the repository root on the commit chosen for the dry run
 (a clean tree is a build gate — `git status --porcelain` must be empty).
 
+Run §0 and **every subsequent step in the same shell session**. `WORK`
+and `GNUPGHOME` are shell-scoped variables: they will not survive
+opening a new terminal or starting an unrelated shell. Losing them is a
+STOP condition — restart the dry run from §0 with a fresh scratch root;
+do not reconstruct the values by hand.
+
 ```bash
 cd /path/to/pixel-development
 git status --porcelain   # expected: empty output
@@ -48,6 +54,15 @@ Version used throughout: `1.0.0` (hypothetical — the bundle never leaves
 An isolated GnuPG home, an ed25519 signing key, no passphrase, an identity
 string that says THROWAWAY, and a 1-day expiry — the exact opposite of the
 production rules in `docs/SIGNING_KEY_LIFECYCLE.md` §1, on purpose.
+
+The throwaway key is **mandatory** for this dry run. Do not substitute,
+import, reference, or use any production, release, maintainer, or other
+long-lived signing key at any point. The `<approved-signing-key>`
+placeholder used in `docs/RELEASE_SIGNING.md` describes the future
+production architecture only — it is not an instruction to insert a real
+key into this rehearsal. Discovering a production key or production
+credential in the environment is a STOP condition: halt the run and treat
+it as a custody finding (`docs/SIGNING_KEY_LIFECYCLE.md` §5/§6).
 
 ```bash
 cat > "$WORK/keyparams" <<'EOF'
@@ -115,8 +130,12 @@ SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
 The build refuses a dirty tree, validates the version, and checks
 checksum-manifest lockstep before writing anything.
 
-Optional signer confirmation (the future production ceremony does this —
-the signer rebuilds and compares before signing):
+Required signer confirmation and reproducibility comparison (the future
+production ceremony does this — the signer rebuilds and compares before
+signing). This is the dry run's reproducibility proof and is **not
+skippable**: rebuild from the same inputs and compare the resulting
+files, modes, and digests. Any difference is a STOP condition —
+investigate; do not sign.
 
 ```bash
 SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
@@ -124,7 +143,7 @@ SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
   --output-dir="$WORK/dist-recheck" >/dev/null
 diff -r "$WORK/dist/pixel-development-1.0.0" \
         "$WORK/dist-recheck/pixel-development-1.0.0"
-# expected: no output (byte-identical rebuild)
+# expected: no output (byte-identical rebuild; any output = STOP)
 ```
 
 ## 3. Sign the manifest (throwaway key, offline)
@@ -367,7 +386,8 @@ after step 0 sets `WORK`/`GNUPGHOME`:
 - [ ] 1. Throwaway identity provisioned (THROWAWAY marker, no passphrase,
       1-day expiry); fingerprint recorded on paper/notes; keyring exported;
       second (wrong) key provisioned
-- [ ] 2. Bundle built; optional rebuild-compare byte-identical
+- [ ] 2. Bundle built; required rebuild-compare byte-identical (STOP on
+      any difference)
 - [ ] 3. Manifest signed (exit 0)
 - [ ] 4. `verified-integrity-only` then **`verified-signed`** observed
 - [ ] 5. Publish checklist walked; every irreversible step confirmed as

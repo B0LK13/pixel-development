@@ -1,0 +1,25 @@
+== session-13 final gate record ==
+branch=auto/session-13-release-dry-run-prep
+convention: one block per gate; raw logs are kept out of the repository
+  (/tmp/s10pm/s13-*.txt) per evidence/README.md bounded-output policy;
+  durable in-repo evidence: evidence/session-13/baseline-record.txt,
+  evidence/session-13/dry-run-rehearsal.txt
+
+[gate 1 — pre-finalization]
+commit=9af937243e549049c4f5b94188e5736ea2f74042
+gate_started=2026-07-13T18:03:29Z
+gate_finished=2026-07-13T18:23:06Z
+duration=19m37s
+suite_result=pass
+suite_count=327 passed / 0 failed / 0 skipped
+ci_local_exit=0 (ALL GATES PASSED)
+pin_check=0 violations (1 workflow file, 2 uses refs)
+diff_check=clean
+key_material_scan=0 markers (docs/RELEASE_DRY_RUN.md,
+  reports/session-13-final-report.md, evidence/session-13/)
+commit_signatures=all 3 authoring commits G (0F8A4FD173240A4B)
+working_tree=clean
+
+[gate 2 — final committed-tree confirmation]
+appended by the evidence follow-up commit after the confirmation gate
+runs on the finalization commit's tree
