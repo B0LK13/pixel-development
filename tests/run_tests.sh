@@ -1680,9 +1680,10 @@ jobs:
       - uses: ./.github/actions/local
       - uses: octo/tool/subdir@$SHA7 # v1.2.3
       - uses: octo/wf/.github/workflows/ci.yml@$SHA7 # v2.0.0
+      - 'uses': actions/checkout@$SHA7 # v7.0.0
       - uses: docker://alpine@sha256:$(printf 'a%.0s' {1..64})")"
   if python3 "$PINC" --root "$d" >/dev/null 2>&1; then
-    t_ok "pin checker accepts: SHA pin, local, nested path, reusable workflow, docker digest"
+    t_ok "pin checker accepts: SHA pin, local, nested path, reusable workflow, quoted key, docker digest"
   else t_fail "pin checker false-positive on valid refs"; fi
   # 30c. rejections — every mutable or malformed form must exit non-zero
   pin_reject(){
@@ -1696,6 +1697,7 @@ jobs:
     else t_ok "pin checker rejects: $1"; fi
   }
   pin_reject "major tag @v4" "uses: actions/checkout@v4"
+  pin_reject "quoted uses key evading with @v4" "'uses': actions/checkout@v4"
   pin_reject "short SHA" "uses: actions/checkout@9c091bb # v7.0.0"
   pin_reject "@main" "uses: actions/checkout@main"
   pin_reject "@master" "uses: actions/setup-node@master"

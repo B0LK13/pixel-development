@@ -20,7 +20,7 @@ VERSION_COMMENT_RE = re.compile(r"#\s*v\d+\.\d+\.\d+")
 DOCKER_DIGEST_RE = re.compile(r"^docker://\S+@sha256:[0-9a-f]{64}$")
 # owner/repo[/path]@ref — owner and repo are non-space, non-@ segments
 EXTERNAL_RE = re.compile(r"^(?P<where>[^\s/@]+/[^\s/@]+(?:/[^\s@]*)?)@(?P<ref>\S+)$")
-USES_RE = re.compile(r"^(?P<indent>\s*)(?:-\s*)?uses:\s*(?P<value>.*)$")
+USES_RE = re.compile(r"^(?P<indent>\s*)(?:-\s*)?[\"']?uses[\"']?:\s*(?P<value>.*)$")
 
 MUTABLE_NAMES = {"main", "master", "latest", "HEAD"}
 
@@ -109,16 +109,16 @@ def main(argv):
         try:
             root = Path(args[i + 1]).resolve()
         except IndexError:
-            print("check-action-pins: --root needs a path", file=sys.stderr)
+            print("check-github-action-pins: --root needs a path", file=sys.stderr)
             return 2
         del args[i:i + 2]
     if args:
-        print("check-action-pins: unknown argument: %s" % args[0], file=sys.stderr)
+        print("check-github-action-pins: unknown argument: %s" % args[0], file=sys.stderr)
         return 2
 
     wf_dir = root / ".github" / "workflows"
     if not wf_dir.is_dir():
-        print("check-action-pins: no workflow directory: %s" % wf_dir, file=sys.stderr)
+        print("check-github-action-pins: no workflow directory: %s" % wf_dir, file=sys.stderr)
         return 2
 
     files = sorted(wf_dir.glob("*.yml")) + sorted(wf_dir.glob("*.yaml"))
