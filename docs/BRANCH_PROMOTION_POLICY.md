@@ -13,7 +13,7 @@ task branch (auto/<topic>)
   → remote branch push (operator-authorized)
   → pull request targeting main
   → required GitHub Actions jobs green
-  → operator review
+  → single-maintainer gate review (§8: checks, signatures, conversations)
   → merge per §3 (operator-approved)
   → post-merge CI on main
 ```
@@ -38,7 +38,8 @@ All must hold at the PR tip:
 - no unresolved critical/high audit findings;
 - remote branch up to date with its local counterpart;
 - required GitHub Actions jobs green at the PR tip;
-- explicit operator approval.
+- operator merge decision (single-maintainer mode, §8 — no
+  second-account approval exists on this repository).
 
 ## 3. Merge strategy
 
@@ -77,13 +78,15 @@ are fixed with narrow, tested commits or the promotion waits.
 
 ## 6. Branch-protection recommendations (operator decision)
 
-Not changes — recommendations, since protection changes are operator-owned:
+Applied 2026-07-13 (session 10, then the single-maintainer adoption in
+§8); protection changes remain operator-owned:
 
 - require a pull request before merging to `main`;
 - required status checks: `suite` and `release-candidate-check`;
 - require signed commits (matches repository policy);
 - require conversation resolution before merge (lightweight review trail);
-- no required approvals count imposed by tooling — the operator is the reviewer.
+- no required approvals count imposed by tooling — the operator is the
+  reviewer (§8).
 
 ## 7. Current required-check inventory
 
@@ -95,3 +98,25 @@ Both jobs in `.github/workflows/test.yml` are required for promotion:
 | `release-candidate-check` | fixture release build, unsigned + throwaway-signed verification, reproducibility |
 
 Neither job publishes, tags, signs with a real identity, or mutates the repo.
+
+## 8. Single-Maintainer Operating Mode
+
+Adopted 2026-07-13 by explicit operator decision (full control
+inventory, evidence links, and restoration conditions:
+`docs/MAIN_BRANCH_PROTECTION.md` §7).
+
+- Independent approval is **not required** — no second maintainer
+  exists, and requiring one deadlocked Session 10 (PR #3 closed
+  unmerged; PR #4 blocked while fully green).
+- Every PR still requires: green `suite` + `release-candidate-check`
+  (strict), all commits signed and GitHub-verified, resolved
+  conversations, merge-commit strategy per §3, and the §2
+  prerequisites.
+- An agent may merge autonomously once those hold; it may never use
+  `--admin`, squash, rebase, or force-push, and never merge with
+  failing checks or unresolved conversations.
+- Publication-class actions (tags, releases, packages, images,
+  deployments, production signing, key or secret changes) remain
+  operator-only ceremonies — this mode changes nothing there.
+- Restore a ≥1 approval requirement when the conditions in
+  `docs/MAIN_BRANCH_PROTECTION.md` §7 apply.

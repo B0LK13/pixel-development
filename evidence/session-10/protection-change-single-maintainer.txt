@@ -1,0 +1,30 @@
+== session-10 protection change — single-maintainer adoption ==
+date: 2026-07-13 (UTC)
+decision: operator adopts single-maintainer merge policy (explicit
+  instruction, this session)
+change: required_pull_request_reviews.required_approving_review_count
+  1 -> 0 — the SOLE change, verified by a field-level deep diff of the
+  protection state before/after. Raw API captures remain on the
+  operating host (/tmp/s10pm/main-protection-before-single-maintainer.json,
+  /tmp/s10pm/main-protection-after-single-maintainer.json); raw JSON is
+  not committed per account-metadata minimization.
+
+before:
+  required checks: suite, release-candidate-check (strict: true)
+  approvals: 1 | dismiss_stale_reviews: true | code_owner: false
+    | last_push_approval: false
+  conversation_resolution: true | enforce_admins: true
+  required_signatures: true | linear_history: false
+  force_pushes: false | deletions: false
+
+after:
+  identical except approvals: 0
+
+application note: the dedicated reviews sub-endpoint returned 404 for
+PUT with the automation token (GET succeeded); the documented atomic
+full-protection PUT (docs/MAIN_BRANCH_PROTECTION.md §3) was used with
+every other value preserved. required_signatures is a separate
+endpoint and was untouched; re-GET after the change: enabled.
+
+policy documentation: docs/MAIN_BRANCH_PROTECTION.md §7,
+docs/BRANCH_PROMOTION_POLICY.md §8 (this branch).

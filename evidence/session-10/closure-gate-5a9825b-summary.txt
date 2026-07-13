@@ -1,0 +1,12 @@
+== session-10 closure final gate (committed tree) ==
+date: 2026-07-13T17:19:16Z .. 2026-07-13T17:41:40Z
+branch: auto/session-10-signed-commit-evidence
+commit: 5a9825bbbe5de3c86dd26fd3a0ea658f1142aa63
+commands: git diff --check; python3 scripts/check-github-action-pins.py;
+  PIXEL_TEST_TIMINGS=1 bash tests/run_tests.sh; bash scripts/ci-local.sh
+
+git diff --check: rc=0 (clean)
+action-pin check: rc=0 (1 workflow file, 2 uses refs, 0 violations)
+test suite: rc=0 — passed: 327   failed: 0   skipped: 0
+ci-local: rc=0 — ALL GATES PASSED (see final-ci-local.txt)
+working tree: clean

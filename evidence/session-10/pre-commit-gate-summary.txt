@@ -1,0 +1,15 @@
+== session-10 pre-commit gate (closure run) ==
+date: 2026-07-13T16:57:40Z .. 2026-07-13T17:16:04Z
+branch: auto/session-10-signed-commit-evidence
+commit: 4c48e8711d77774a328db88d6d088145d002218b
+commands: git diff --check; python3 scripts/check-github-action-pins.py;
+  PIXEL_TEST_TIMINGS=1 bash tests/run_tests.sh; bash scripts/ci-local.sh
+
+git diff --check: rc=0 (clean)
+action-pin check: rc=0 (1 workflow file, 2 uses refs, 0 violations)
+test suite: rc=0 — passed: 327   failed: 0   skipped: 0
+ci-local: rc=0 — ALL GATES PASSED (see pre-commit-ci-local.txt)
+
+note: replaces the prior gate run terminated by signal 9 (invalid as
+verification evidence); 21 stale GnuPG dotlocks in /root/.gnupg were
+cleared before this run after they wedged all gpg operations
