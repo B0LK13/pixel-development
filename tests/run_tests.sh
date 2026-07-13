@@ -1724,6 +1724,13 @@ if [ "$(grep -c 'uses: actions/checkout@' "$WF")" -ge 1 ] \
   t_ok "workflow checkouts disable credential persistence (verification-only)"
 else t_fail "checkout credential persistence" "persist-credentials: false missing"; fi
 
+# 30g. controlled update automation (dependabot) keeps SHA pins current
+if [ -f "$ROOT/.github/dependabot.yml" ] \
+   && grep -qF 'package-ecosystem: github-actions' "$ROOT/.github/dependabot.yml" \
+   && grep -qF 'directory: /' "$ROOT/.github/dependabot.yml"; then
+  t_ok "dependabot.yml: github-actions ecosystem updates configured"
+else t_fail "dependabot config" "missing or incomplete"; fi
+
 # --- summary ---------------------------------------------------------------------
 echo
 if [ "${#FAILED_TESTS[@]}" -gt 0 ]; then
