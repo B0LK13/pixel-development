@@ -2,7 +2,10 @@
 
 - **Date**: 2026-07-13
 - **Branch**: `auto/session-11-signing-architecture` (base: `main` @ `0508a04`)
-- **Status**: approved design, pre-implementation
+- **Status**: approved design. The Session 11 operator mandate (2026-07-13)
+  rescoped delivery to **documentation only** — the tooling contracts in §6/§7
+  and the test plan in §12 are implementation-ready *recommendations* for a
+  subsequent build session, not Session 11 deliverables.
 - **Chosen approach**: **A — offline operator signing, tooling-assisted** (alternatives evaluated in §13)
 - **Companion documents**: `docs/RELEASE_SIGNING.md`, `docs/SIGNING_KEY_LIFECYCLE.md`,
   `docs/BOOTSTRAP_TRUST_MODEL.md`, `docs/BOOTSTRAP_RELEASE_PROCESS.md`,
