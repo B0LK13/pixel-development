@@ -240,7 +240,7 @@ unaffected because the build path is untouched.
 - One `SIGNING-EVIDENCE.json` plus verifier transcript per signing event.
 - **Storage split**: the full record stays operator-held, alongside the key
   backup and revocation certificate. The public subset is committed at release
-  time under `evidence/releases/<version>/signing-evidence.json` — public data
+  time under `evidence/releases/<version>/SIGNING-EVIDENCE.json` — public data
   only: version, commit, digests, the *published* public key's fingerprint,
   date, verdict.
 - **Retention**: indefinite, per release, including after revocation —
@@ -295,7 +295,7 @@ automation, or a change to branch protection.
 
 All new failure modes fail closed and reuse the existing verdict vocabulary
 (`verified-integrity-only`, `verified-signed`, `failed-signature`,
-`failed-checksum`, `failed-metadata`, `failed-policy` — `RELEASE_SIGNING` §5)
+`failed-checksum`, `failed-metadata`, `failed-policy` — `docs/RELEASE_SIGNING.md` §5)
 plus script-local precondition errors:
 
 | Condition | Behavior |

@@ -125,7 +125,7 @@ Evidence:
 - `5f1a311` runbooks + roadmap
 - `ae00997` key recovery/destruction lifecycle; reconciliation cross-refs
 - `539d866` bare-script-reference fix (§29b)
-- evidence + this report (evidence/report-only, on top of verified tip `539d866`) evidence + this report
+- evidence + this report (evidence/report-only, on top of verified tip `539d866`)
 
 ## 7. Boundaries preserved
 
