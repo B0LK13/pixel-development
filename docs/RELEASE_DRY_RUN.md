@@ -16,9 +16,11 @@ executes it. Nothing here creates or touches a production key.
 
 **Hermeticity:** every command below runs offline — no network, no
 keyservers, no paid agents, no package installs. Tools required: `git`,
-`gpg` + `gpgv` (gnupg), `sha256sum`, GNU `date`/`touch` (already required
-by the builder). All scratch state lives under one `mktemp` directory and
-is destroyed at the end.
+`gpg` + `gpgv` (gnupg), `sha256sum`, `diff`, `find`, `sort`, `awk`, `sed`,
+and standard coreutils (`cp`, `rm`, `mkdir`, `chmod`, `cat`, `printf`,
+`mktemp`, GNU `date`/`touch` — the last already required by the builder).
+All scratch state lives under one `mktemp` directory and is destroyed at
+the end.
 
 **Rule for the whole run:** if any expected output does not match, STOP.
 Do not improvise a workaround; record the divergence and hand it back.
@@ -141,9 +143,20 @@ investigate; do not sign.
 SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
   bash scripts/build-release-candidate.sh --version=1.0.0 \
   --output-dir="$WORK/dist-recheck" >/dev/null
-diff -r "$WORK/dist/pixel-development-1.0.0" \
-        "$WORK/dist-recheck/pixel-development-1.0.0"
-# expected: no output (byte-identical rebuild; any output = STOP)
+A="$WORK/dist/pixel-development-1.0.0"
+B="$WORK/dist-recheck/pixel-development-1.0.0"
+# contents:
+diff -r "$A" "$B"
+# modes and paths:
+( cd "$A" && find . -printf '%m %p\n' | sort ) > "$WORK/modes-a.txt"
+( cd "$B" && find . -printf '%m %p\n' | sort ) > "$WORK/modes-b.txt"
+diff "$WORK/modes-a.txt" "$WORK/modes-b.txt"
+# digests:
+( cd "$A" && find . -type f -exec sha256sum {} + | sort -k2 ) > "$WORK/digests-a.txt"
+( cd "$B" && find . -type f -exec sha256sum {} + | sort -k2 ) > "$WORK/digests-b.txt"
+diff "$WORK/digests-a.txt" "$WORK/digests-b.txt"
+# expected: no output from any of the three diffs (identical contents,
+# modes, and digests; any output = STOP)
 ```
 
 ## 3. Sign the manifest (throwaway key, offline)

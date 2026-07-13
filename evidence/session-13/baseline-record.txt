@@ -19,7 +19,7 @@ prior-art references (local-only, unpushed — do not merge from):
   auto/session-11-signing-architecture
   auto/session-12-release-trust-blueprint
     (docs/SIGNING_ROADMAP.md phase 2 = the operator ceremony this dry
-     run rehearse-prepares; reports/session-12-final-report.md)
+     run rehearses; reports/session-12-final-report.md)
 boundaries: no production key material anywhere; throwaway keys only,
   created under mktemp GNUPGHOME and destroyed in the same run; main and
   the session-10/11/12 branches untouched

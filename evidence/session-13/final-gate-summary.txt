@@ -38,3 +38,8 @@ unsigned_integrity=covered by suite (bundle verifier, unsigned fixture)
 signed_fixture=covered by suite (signed fixture + failure injection)
 reproducibility=covered by suite (byte-identical rebuild check)
 working_tree=clean
+
+note=gate 2 ran on the finalization commit 72e86ab; this summary file was
+  then extended in the evidence-only follow-up commit b833ae0 (the branch
+  tip at publication). The tested tree and the branch tip differ only by
+  this summary file; no code, script, or workflow changed after gate 2.
