@@ -95,6 +95,44 @@ worktree clean.
   The recognition claims in
   `reports/session-10-signed-commit-protection.md` stand.
 
+## Single-maintainer policy adoption (2026-07-13)
+
+After this report's evidence shipped, the operator adopted the
+single-maintainer policy by explicit decision:
+
+- `required_approving_review_count`: **1 → 0** — the only protection
+  change, verified by a field-level diff of the before/after state
+  (`evidence/session-10/protection-change-single-maintainer.txt`).
+- Rationale: single-maintainer repository; the independent-approval
+  requirement deadlocked the closure flow (PR #3 closed unmerged, PR #4
+  green but unapprovable). Aligns tooling with
+  `docs/BRANCH_PROMOTION_POLICY.md` §6's documented intent.
+- Retained: required checks (strict), required signatures, conversation
+  resolution, `enforce_admins`, no force-push/deletion, merge commits,
+  Action-pin enforcement, reproducibility gates.
+- Not authorized: production signing, tags/releases/packages/images,
+  deployments, key or secret changes, force-push, merging with failing
+  checks.
+- Restoration conditions and the full control inventory:
+  `docs/MAIN_BRANCH_PROTECTION.md` §7.
+
+PR #4 closure under the adopted policy:
+
+- Merged 2026-07-13T19:07:14Z — merge commit
+  `04d812708f605bd8851a41438b363b0882f29786` (true merge commit;
+  GitHub web-flow signature, GraphQL `state: VALID`).
+- Six Copilot review threads: five documentation defects fixed in
+  `5bfba48` (durable in-repo gate evidence, GraphQL-authoritative
+  verification wording, append-only PR #3 disposition correction,
+  copy-pasteable grep pattern), one PII-redaction suggestion declined
+  with rationale (address inherent to commit authorship and the
+  registered key UID); all threads replied and resolved.
+- Post-merge local gate on `main` @ `04d81270` green: 327 passed /
+  0 failed / 0 skipped, ci-local exit 0, 0 pin violations, clean tree
+  (2026-07-13T19:10:21Z → 19:31:55Z).
+- Remote CI on the merge SHA green: run 29277229212 (`suite` +
+  `release-candidate-check` success).
+
 ## Session 10 report index
 
 - `reports/session-10-action-inventory.md` — workflow/action inventory

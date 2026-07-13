@@ -3,8 +3,9 @@
 Recommended branch-protection configuration for `main`, formalizing the
 recommendations in `docs/BRANCH_PROMOTION_POLICY.md` §6. Applying these
 settings is an outward-facing repository change and remains
-**operator-owned** — session 10 documents but does not apply them without
-explicit authorization.
+**operator-owned**: session 10 applied them with explicit operator
+authorization on 2026-07-13 (§6), and any later change likewise requires
+explicit operator authorization.
 
 ## 1. Required status checks
 
@@ -28,8 +29,8 @@ stale PR cannot merge on old CI results.
 
 | setting | value | rationale |
 |---|---|---|
-| Require a pull request before merging | on | `main` is canonical; every change is reviewed |
-| Required approvals | 1 | lightweight; the operator is the reviewer (policy §6) |
+| Require a pull request before merging | on | `main` is canonical; every change arrives as a PR and passes the automated gate (§7) |
+| Required approvals | 0 (single-maintainer mode, §7) | no second-account reviewer exists; automated controls are the merge gate — restore ≥1 when a second maintainer joins |
 | Require review from Code Owners | off | no CODEOWNERS; single-operator repo |
 | Require status checks to pass | on | `suite`, `release-candidate-check` (§1) |
 | Require branches to be up to date | on | no merging on stale CI |
@@ -65,7 +66,7 @@ gh api -X PUT repos/B0LK13/pixel-development/branches/main/protection \
   -F 'required_status_checks[checks][][context]=suite' \
   -F 'required_status_checks[checks][][context]=release-candidate-check' \
   -F enforce_admins=true \
-  -F required_pull_request_reviews[required_approving_review_count]=1 \
+  -F required_pull_request_reviews[required_approving_review_count]=0 \
   -F required_pull_request_reviews[require_last_push_approval]=false \
   -F required_conversation_resolution=true \
   -F required_linear_history=false \
@@ -77,7 +78,9 @@ gh api -X PUT repos/B0LK13/pixel-development/branches/main/protection \
 gh api -X POST repos/B0LK13/pixel-development/branches/main/protection/required_signatures
 ```
 
-Adjust `enforce_admins` and the signed-commit endpoint only by explicit
+The approval count is `0` under the Single-Maintainer Operating Mode
+(§7); raise it to ≥1 only per the §7 restoration conditions. Adjust
+`enforce_admins` and the signed-commit endpoint only by explicit
 operator decision. Note: required signatures reject any commit GitHub
 cannot verify against a known key — ensure the operator's signing key is
 registered with GitHub first (`gh api users/<user>/gpg_keys`), or web-flow
@@ -118,4 +121,55 @@ rewriting history.
 
 ## 6. Status
 
-Session 10: **DOCUMENTED — NOT APPLIED** (awaiting operator authorization).
+- 2026-07-13: protection **applied** (session 10; evidence
+  `evidence/session-10/protection-verification.txt`).
+- 2026-07-13: required signed commits **enabled** (separate endpoint;
+  `evidence/session-10/protection-verification.txt`).
+- 2026-07-13: **Single-Maintainer Operating Mode adopted** (§7):
+  required approvals 1 → 0, all other settings verified unchanged by
+  deep diff (`evidence/session-10/protection-change-single-maintainer.txt`).
+
+## 7. Single-Maintainer Operating Mode
+
+Adopted by explicit operator decision on 2026-07-13.
+
+**Why:** this repository is operated by a single maintainer. Requiring
+approval from a second GitHub account creates a permanent deadlock
+rather than a meaningful control: Session 10's PR #3 was closed
+unmerged for want of an independent approver, and PR #4 sat blocked
+solely on `REVIEW_REQUIRED` with every check green. The setting now
+matches `docs/BRANCH_PROMOTION_POLICY.md` §6's long-standing intent
+("no required approvals count imposed by tooling — the operator is the
+reviewer").
+
+**Setting:** `required_approving_review_count: 0`. Nothing else
+changed — verified by a field-level diff of the protection state
+before/after (`evidence/session-10/protection-change-single-maintainer.txt`).
+
+**Compensating controls (all remain mandatory):**
+
+- required checks `suite` + `release-candidate-check`, strict mode
+  (branches must be up to date before merging);
+- required signed commits, recognized by GitHub;
+- required conversation resolution;
+- administrator enforcement (`enforce_admins`) — the operator cannot
+  bypass the gate either;
+- force-push and branch deletion disabled;
+- merge-commit history preserved (no squash/rebase of session chains);
+- immutable GitHub Action pins, enforced locally and in CI;
+- reproducibility and release-verification gates inside the required
+  checks;
+- key-material scans inside the suite.
+
+**Scope limit:** this mode covers source/documentation PR merging only.
+It does not authorize production release signing, tags, releases,
+packages, images, deployments, key rotation, secret changes,
+force-pushes, or merging with failing checks — those remain
+operator-gated ceremonies with their own approval requirements.
+
+**Restoring independent review:** set the approval count back to ≥1
+when a trusted second maintainer joins, the repository moves to an
+organization with a reviewer team, production release signing begins,
+publication/deployment workflows are introduced, or regulation or
+client terms require separation of duties. Until then, the automated
+controls above are the primary merge gate.
