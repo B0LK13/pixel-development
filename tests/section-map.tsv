@@ -27,7 +27,7 @@
 25	release.bundle-verifier-integrity	release bundle verifier: integrity + failure injection	24	release,verify	medium	linux
 26	release.bundle-verifier-signed	release bundle verifier: signed fixtures (tier 2)	25	signing,release	medium	linux
 27	release.reproducibility	release reproducibility (SOURCE_DATE_EPOCH)	24	release,reproducibility	medium	linux
-28	release.documentation-contracts	release documentation contracts (§5 docs + verifier hygiene)	21,24,25	docs,release	short	all
+28	release.documentation-contracts	release documentation contracts (§5 docs + verifier hygiene)	21,24,25,27	docs,release	short	all
 29	repo.readiness	repository readiness (session 7)	0	repo,docs	short	all
 30	workflow.action-pins	GitHub Actions pinning policy (session 10)	22	workflow,security	short	all
 31	agent.os-validation	agent operating system checks (session 14)	30	agent-os,governance	long	all

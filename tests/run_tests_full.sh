@@ -34,6 +34,8 @@ fi
 t_ok(){   PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; _tt_mark "$1"; }
 t_fail(){ FAIL=$((FAIL+1)); FAILED_TESTS+=("$1"); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | head -20 | sed 's/^/        /'; _tt_mark "FAIL $1"; }
 t_skip(){ SKIP=$((SKIP+1)); printf '  skip  %s\n' "$1"; _tt_mark "skip $1"; }
+blob_sha(){ git -C "$ROOT" show "$1:pixel-bootstrap.sh" 2>/dev/null | (sha256sum 2>/dev/null || shasum -a 256) | awk '{print $1}'; }
+tree_hashes(){ (cd "$1" && find . -type f -exec sha256sum {} + | sort -k2); }
 
 SCRIPTS=(pixel-bootstrap.sh pixel-dev-setup.sh pixel-apps-setup.sh pixel-autodev.sh)
 
@@ -777,7 +779,6 @@ fi
 readme_block="$(awk '/^## 1\./{f=1} f&&/^```bash/{c=1;next} c&&/^```/{exit} c{print}' "$ROOT/README.md")"
 pin_commit="$(printf '%s\n' "$readme_block" | grep -oE 'raw\.githubusercontent\.com/B0LK13/pixel-development/[0-9a-f]{40}/pixel-bootstrap\.sh' | head -1 | grep -oE '[0-9a-f]{40}')"
 pin_digest="$(printf '%s\n' "$readme_block" | grep -oE '[0-9a-f]{64}' | head -1)"
-blob_sha(){ git -C "$ROOT" show "$1:pixel-bootstrap.sh" 2>/dev/null | (sha256sum 2>/dev/null || shasum -a 256) | awk '{print $1}'; }
 [ "${#pin_commit}" -eq 40 ] || pin_commit=
 [ "${#pin_digest}" -eq 64 ] || pin_digest=
 if [ -n "$pin_commit" ] && [ -n "$pin_digest" ]; then

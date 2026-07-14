@@ -31,8 +31,8 @@ if git remote get-url origin >/dev/null 2>&1; then
 fi
 sync_state='unknown'
 if [ "$remote" = origin ] && git rev-parse "@{u}" >/dev/null 2>&1; then
-  ahead="$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)"
-  behind="$(git rev-list --count HEAD..@{u} 2>/dev/null || echo 0)"
+  ahead="$(git rev-list --count "@{u}..HEAD" 2>/dev/null || echo 0)"
+  behind="$(git rev-list --count "HEAD..@{u}" 2>/dev/null || echo 0)"
   sync_state="ahead:$ahead behind:$behind"
 fi
 

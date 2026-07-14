@@ -175,7 +175,11 @@ if [ "$CHANGED" = 1 ]; then
       changed_paths="${changed_paths}
 ${local_diff}"
       changed_paths="$(printf '%s\n' "$changed_paths" | awk 'NF' | sort -u)"
-      [ -n "$changed_paths" ] || changed_paths='.'
+      if [ -z "$changed_paths" ]; then
+        add_reason "no changed files detected; selecting validation subset section 0"
+        SECTIONS='0'
+        changed_paths=''
+      fi
       while IFS= read -r p; do
         [ -n "$p" ] || continue
         case "$p" in
