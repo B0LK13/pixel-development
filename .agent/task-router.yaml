@@ -1,0 +1,153 @@
+routes:
+  - name: cli-changes
+    match: ["cli", "flag", "argument", "contract"]
+    risk: high
+    instructions:
+      - "scripts/AGENTS.md"
+      - "docs/CLI_CONTRACT.md"
+      - "docs/AGENT_WORKFLOW_CONTRACT.md"
+    required_context:
+      - "tests/section-map.tsv"
+      - "scripts/check-cli-contracts.py"
+    targeted_checks:
+      - "bash tests/run_tests.sh --test cli.help-contract"
+      - "bash tests/run_tests.sh --test cli.timeout-contract"
+    full_gates:
+      - "bash tests/run_tests.sh"
+      - "bash scripts/ci-local.sh"
+    operator_boundaries:
+      - "no push/merge/tag/release"
+
+  - name: tests
+    match: ["test", "harness", "fixture", "hermetic"]
+    risk: high
+    instructions:
+      - "tests/AGENTS.md"
+      - "docs/AGENT_TEST_STRATEGY.md"
+    required_context:
+      - "tests/run_tests.sh --list"
+      - "tests/section-map.tsv"
+    targeted_checks:
+      - "bash tests/run_tests.sh --changed"
+    full_gates:
+      - "bash tests/run_tests.sh"
+      - "bash scripts/ci-local.sh"
+    operator_boundaries:
+      - "no release/publish operations"
+
+  - name: github-workflows
+    match: ["workflow", ".github", "actions", "pin", "ci"]
+    risk: high
+    instructions:
+      - ".github/AGENTS.md"
+      - "docs/GITHUB_ACTIONS_PINNING_POLICY.md"
+    required_context:
+      - "scripts/check-github-action-pins.py"
+    targeted_checks:
+      - "python3 scripts/check-github-action-pins.py"
+      - "bash tests/run_tests.sh --test workflow.action-pins"
+    full_gates:
+      - "bash tests/run_tests.sh"
+      - "bash scripts/ci-local.sh"
+    operator_boundaries:
+      - "no branch-protection modifications without approval"
+
+  - name: release-tooling
+    match: ["release", "bundle", "reproducibility", "signing"]
+    risk: high
+    instructions:
+      - "docs/RELEASE_SIGNING.md"
+      - "docs/PRODUCTION_SIGNING_ARCHITECTURE.md"
+      - "docs/AGENT_SECURITY_BOUNDARIES.md"
+    required_context:
+      - "docs/BOOTSTRAP_RELEASE_PROCESS.md"
+    targeted_checks:
+      - "bash tests/run_tests.sh --tag release"
+      - "bash tests/run_tests.sh --tag signing"
+    full_gates:
+      - "bash tests/run_tests.sh"
+      - "bash scripts/ci-local.sh"
+    operator_boundaries:
+      - "production signing/tag/release are operator-only"
+
+  - name: documentation
+    match: ["docs", "documentation", "readme"]
+    risk: medium
+    instructions:
+      - "docs/AGENTS.md"
+      - "docs/AGENT_HANDOFF_PROTOCOL.md"
+    required_context:
+      - "scripts/check-doc-command-parity.py"
+      - "scripts/check-evidence-links.py"
+    targeted_checks:
+      - "python3 scripts/check-doc-command-parity.py"
+      - "python3 scripts/check-evidence-links.py"
+    full_gates:
+      - "bash tests/run_tests.sh"
+      - "bash scripts/ci-local.sh"
+    operator_boundaries:
+      - "no policy downgrades in docs"
+
+  - name: security-review
+    match: ["security", "threat", "boundary", "hardening"]
+    risk: high
+    instructions:
+      - "docs/AGENT_SECURITY_BOUNDARIES.md"
+    required_context:
+      - "AGENTS.md"
+    targeted_checks:
+      - "python3 scripts/check-agent-instructions.py"
+      - "python3 scripts/check-cli-contracts.py"
+    full_gates:
+      - "bash tests/run_tests.sh"
+      - "bash scripts/ci-local.sh"
+    operator_boundaries:
+      - "operator approval for protected actions"
+
+  - name: ci-failure
+    match: ["ci failure", "red build", "workflow failure"]
+    risk: high
+    instructions:
+      - ".agent/skills/fix-ci/SKILL.md"
+    required_context:
+      - "scripts/agent-context.sh --format markdown"
+    targeted_checks:
+      - "bash tests/run_tests.sh --changed"
+      - "bash scripts/ci-local.sh --format json"
+    full_gates:
+      - "bash tests/run_tests.sh"
+      - "bash scripts/ci-local.sh"
+    operator_boundaries:
+      - "no direct remediation on protected branches"
+
+  - name: adapter-changes
+    match: ["adapter", "mcp", "integration"]
+    risk: medium
+    instructions:
+      - ".agent/skills/add-adapter/SKILL.md"
+      - "docs/MCP_INTEGRATION.md"
+    required_context:
+      - "AGENTS.md"
+    targeted_checks:
+      - "python3 scripts/check-agent-instructions.py"
+    full_gates:
+      - "bash tests/run_tests.sh"
+      - "bash scripts/ci-local.sh"
+    operator_boundaries:
+      - "no adapter as source-of-truth"
+
+  - name: evidence-and-reports
+    match: ["evidence", "report", "handoff"]
+    risk: medium
+    instructions:
+      - "docs/AGENT_HANDOFF_PROTOCOL.md"
+      - ".agent/skills/evidence-reconciliation/SKILL.md"
+    required_context:
+      - "reports/"
+    targeted_checks:
+      - "python3 scripts/check-evidence-links.py"
+    full_gates:
+      - "bash tests/run_tests.sh"
+      - "bash scripts/ci-local.sh"
+    operator_boundaries:
+      - "no fabricated evidence"

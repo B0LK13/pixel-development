@@ -239,6 +239,17 @@ the same command up from `.pixel-lab.json` when it works tasks in this repo.
 bash tests/run_tests.sh
 ```
 
+For targeted iteration, use:
+
+```bash
+bash tests/run_tests.sh --list
+bash tests/run_tests.sh --test=<id>
+bash tests/run_tests.sh --section=<n>
+bash tests/run_tests.sh --changed
+```
+
+Structured output is available with `bash tests/run_tests.sh --json`.
+
 It checks required files, `bash -n` syntax, shellcheck (warning and up), the
 `--help`/unknown-flag contract, `.pixel-lab.json` validity, autodev dry-run
 behaviour, the full `--timeout` contract, and finishes with a clean-clone
@@ -250,8 +261,9 @@ and `auto/*` and on every pull request — local tests only, `contents: read`,
 10-minute cap. CI never invokes agents, never pushes, never mutates the repo.
 
 **Local CI parity.** `bash scripts/ci-local.sh` runs the same gates as CI
-(whitespace, checksum lockstep, syntax, shellcheck, full suite) from any
-directory, fail-fast, first failure stops. Harness knobs:
+(whitespace, checksum lockstep, policy checks, syntax, shellcheck, full suite)
+from any directory, fail-fast, first failure stops. Structured output is
+available via `bash scripts/ci-local.sh --json`. Harness knobs:
 `PIXEL_TESTS_NO_CLONE=1` skips the nested clean-clone smoke for a fast local
 pass (the default gate and CI always run it); `PIXEL_TEST_TIMINGS=1` prints
 per-test elapsed times to stderr.
@@ -271,6 +283,9 @@ per-test elapsed times to stderr.
   remote CI runbook: [`docs/REMOTE_CI_VERIFICATION.md`](docs/REMOTE_CI_VERIFICATION.md).
   Contributing: [`docs/CONTRIBUTOR_QUICKSTART.md`](docs/CONTRIBUTOR_QUICKSTART.md);
   operator commands: [`docs/OPERATOR_COMMAND_INDEX.md`](docs/OPERATOR_COMMAND_INDEX.md).
+  Agent operating system: [`AGENTS.md`](AGENTS.md),
+  [`docs/AGENT_ARCHITECTURE.md`](docs/AGENT_ARCHITECTURE.md),
+  [`docs/AGENT_WORKFLOW_CONTRACT.md`](docs/AGENT_WORKFLOW_CONTRACT.md).
   CI governance: [`docs/GITHUB_ACTIONS_PINNING_POLICY.md`](docs/GITHUB_ACTIONS_PINNING_POLICY.md);
   branch promotion: [`docs/BRANCH_PROMOTION_POLICY.md`](docs/BRANCH_PROMOTION_POLICY.md);
   main protection: [`docs/MAIN_BRANCH_PROTECTION.md`](docs/MAIN_BRANCH_PROTECTION.md).

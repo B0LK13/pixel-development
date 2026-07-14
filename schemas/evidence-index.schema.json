@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvidenceIndex",
+  "type": "object",
+  "required": ["schema_version", "run_id", "entries"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "run_id": { "type": "string" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "check_id", "timestamp", "producer"],
+        "properties": {
+          "path": { "type": "string" },
+          "check_id": { "type": "string" },
+          "timestamp": { "type": "string" },
+          "producer": { "type": "string" },
+          "digest": { "type": "string" },
+          "sensitivity": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
+

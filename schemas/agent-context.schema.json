@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentContext",
+  "type": "object",
+  "required": [
+    "branch",
+    "commit",
+    "working_tree",
+    "architecture_summary",
+    "instructions",
+    "tests_command",
+    "ci_command",
+    "active_gates",
+    "recent_reports",
+    "changed_files"
+  ],
+  "properties": {
+    "branch": { "type": "string" },
+    "commit": { "type": "string" },
+    "working_tree": { "type": "string" },
+    "architecture_summary": { "type": "string" },
+    "instructions": { "type": "string" },
+    "tests_command": { "type": "string" },
+    "ci_command": { "type": "string" },
+    "active_gates": { "type": "string" },
+    "recent_reports": { "type": "array", "items": { "type": "string" } },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "risk"],
+        "properties": {
+          "path": { "type": "string" },
+          "risk": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}
+

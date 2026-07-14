@@ -1,0 +1,96 @@
+version: "1.0"
+schema_version: "1"
+
+supported_agents:
+  - copilot
+  - codex
+  - claude
+  - kimi
+
+platforms:
+  canonical:
+    - linux
+  secondary:
+    - windows
+  notes:
+    - full release/security harness paths are Linux-first
+    - cross-platform validation focuses on manifest/context/router/parity checks
+
+entrypoints:
+  tests: "bash tests/run_tests.sh"
+  tests_list: "bash tests/run_tests.sh --list"
+  tests_targeted: "bash tests/run_tests.sh --test workflow.action-pins"
+  ci: "bash scripts/ci-local.sh"
+  ci_json: "bash scripts/ci-local.sh --format json"
+  context_markdown: "bash scripts/agent-context.sh --format markdown"
+  context_json: "bash scripts/agent-context.sh --format json"
+  action_pins: "python3 scripts/check-github-action-pins.py"
+
+architecture:
+  bootstrap: "pixel-bootstrap.sh"
+  dev_setup: "pixel-dev-setup.sh"
+  apps_setup: "pixel-apps-setup.sh"
+  autonomous_loop: "pixel-autodev.sh"
+  verification_harness: "tests/run_tests.sh"
+  ci_parity: "scripts/ci-local.sh"
+
+contracts:
+  root_agent_contract: "AGENTS.md"
+  cli: "docs/CLI_CONTRACT.md"
+  branch_promotion: "docs/BRANCH_PROMOTION_POLICY.md"
+  signing: "docs/PRODUCTION_SIGNING_ARCHITECTURE.md"
+  workflow_pinning: "docs/GITHUB_ACTIONS_PINNING_POLICY.md"
+  workflow_contract: "docs/AGENT_WORKFLOW_CONTRACT.md"
+  security_boundaries: "docs/AGENT_SECURITY_BOUNDARIES.md"
+  handoff_protocol: "docs/AGENT_HANDOFF_PROTOCOL.md"
+
+important_paths:
+  workflows: ".github/workflows/"
+  scripts: "scripts/"
+  tests: "tests/"
+  docs: "docs/"
+  evidence: "evidence/"
+  reports: "reports/"
+  schemas: "schemas/"
+
+gates:
+  mandatory_final:
+    - "bash tests/run_tests.sh"
+    - "bash scripts/ci-local.sh"
+  targeted_selection:
+    - "bash tests/run_tests.sh --list"
+    - "bash tests/run_tests.sh --changed"
+
+boundaries:
+  require_operator_approval:
+    - production_signing
+    - tag_creation
+    - release_publication
+    - deployment
+    - secret_changes
+    - branch_protection_changes
+    - force_operations
+    - destructive_host_changes
+
+checks:
+  instruction_drift: "python3 scripts/check-agent-instructions.py"
+  command_parity: "python3 scripts/check-doc-command-parity.py"
+  evidence_links: "python3 scripts/check-evidence-links.py"
+  cli_contract_drift: "python3 scripts/check-cli-contracts.py"
+  test_registration: "python3 scripts/check-test-registration.py"
+  context_freshness: "python3 scripts/check-context-freshness.py"
+  stale_claims: "python3 scripts/check-stale-claims.py"
+  agent_secrets: "python3 scripts/check-agent-secrets.py"
+  skill_index: "python3 scripts/check-skill-index.py"
+
+evidence:
+  root: "evidence/"
+  sessions: "evidence/session-*"
+  releases: "evidence/releases/"
+  reports: "reports/"
+
+release_boundaries:
+  operator_only:
+    - tag_creation
+    - release_publication
+    - production_signing

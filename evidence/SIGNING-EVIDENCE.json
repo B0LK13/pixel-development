@@ -1,0 +1,5 @@
+{
+  "status": "placeholder",
+  "valid_for_release": false,
+  "note": "Operator-produced signing evidence belongs under evidence/releases/<version>/ during release execution."
+}

@@ -1,0 +1,28 @@
+skills:
+  - id: add-cli-flag
+    path: ".agent/skills/add-cli-flag/SKILL.md"
+    tags: [cli, contract]
+  - id: fix-ci
+    path: ".agent/skills/fix-ci/SKILL.md"
+    tags: [ci, workflow]
+  - id: add-adapter
+    path: ".agent/skills/add-adapter/SKILL.md"
+    tags: [adapter, integration]
+  - id: release-verification
+    path: ".agent/skills/release-verification/SKILL.md"
+    tags: [release, signing]
+  - id: update-documentation
+    path: ".agent/skills/update-documentation/SKILL.md"
+    tags: [docs, parity]
+  - id: security-review
+    path: ".agent/skills/security-review/SKILL.md"
+    tags: [security, boundaries]
+  - id: clean-clone-validation
+    path: ".agent/skills/clean-clone-validation/SKILL.md"
+    tags: [harness, clone]
+  - id: evidence-reconciliation
+    path: ".agent/skills/evidence-reconciliation/SKILL.md"
+    tags: [evidence, reports]
+  - id: branch-promotion
+    path: ".agent/skills/branch-promotion/SKILL.md"
+    tags: [branch, promotion]

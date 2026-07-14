@@ -36,6 +36,17 @@ jobs:
           persist-credentials: false
       - name: Verify GitHub Action pins
         run: python3 scripts/check-github-action-pins.py
+      - name: Agent-system checks
+        run: |
+          python3 scripts/check-agent-instructions.py
+          python3 scripts/check-doc-command-parity.py
+          python3 scripts/check-evidence-links.py
+          python3 scripts/check-cli-contracts.py
+          python3 scripts/check-test-registration.py
+          python3 scripts/check-context-freshness.py
+          python3 scripts/check-stale-claims.py
+          python3 scripts/check-agent-secrets.py
+          python3 scripts/check-skill-index.py
       - name: Install shellcheck
         run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
       - name: Whitespace / conflict-marker gate
@@ -44,6 +55,84 @@ jobs:
         run: bash scripts/update-bootstrap-checksums.sh --check
       - name: Run verification suite
         run: bash tests/run_tests.sh
+
+  agent-os-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate Agent OS checks
+        run: |
+          python3 scripts/check-agent-instructions.py
+          python3 scripts/check-doc-command-parity.py
+          python3 scripts/check-evidence-links.py
+          python3 scripts/check-cli-contracts.py
+          python3 scripts/check-test-registration.py
+          python3 scripts/check-context-freshness.py
+          python3 scripts/check-stale-claims.py
+          python3 scripts/check-agent-secrets.py
+          python3 scripts/check-skill-index.py
+      - name: Validate targeted harness interfaces
+        run: |
+          bash tests/run_tests.sh --list
+          bash tests/run_tests.sh --list --format json >/tmp/check-list.json
+          bash tests/run_tests.sh --test workflow.action-pins --format json >/tmp/check-targeted.json
+      - name: Validate shallow-clone failure message
+        run: |
+          git clone --depth 1 "file://$GITHUB_WORKSPACE" "$RUNNER_TEMP/shallow"
+          (
+            cd "$RUNNER_TEMP/shallow"
+            set +e
+            bash tests/run_tests.sh >"$RUNNER_TEMP/shallow.out" 2>&1
+            rc=$?
+            set -e
+            [ "$rc" -ne 0 ]
+            grep -q "shallow clone detected" "$RUNNER_TEMP/shallow.out"
+          )
+
+  agent-os-clean-clone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Clean-clone Agent OS commands
+        run: |
+          git clone "file://$GITHUB_WORKSPACE" "$RUNNER_TEMP/clean"
+          (
+            cd "$RUNNER_TEMP/clean"
+            bash scripts/agent-context.sh --format json >/tmp/agent-context.json
+            bash tests/run_tests.sh --list >/tmp/check-list.txt
+            bash tests/run_tests.sh --test workflow.action-pins >/tmp/check-targeted.txt
+          )
+
+  agent-os-windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Cross-platform Agent OS validation
+        run: |
+          python3 scripts/check-agent-instructions.py
+          python3 scripts/check-test-registration.py
+          bash tests/run_tests.sh --list --format json >/tmp/check-list-win.json
 
   # Validates release-candidate mechanics with throwaway fixtures only:
   # version 0.0.0 is reserved for CI, the signing key is generated per run,

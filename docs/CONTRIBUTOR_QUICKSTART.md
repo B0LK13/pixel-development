@@ -21,10 +21,21 @@ the kit on a Pixel phone, start at the README instead.
 | command | what it does |
 |---------|--------------|
 | `bash tests/run_tests.sh` | the full hermetic suite — the only sanctioned gate; ends with a clean-clone smoke |
+| `bash tests/run_tests.sh --list` | list stable section/test IDs for targeted iteration |
+| `bash tests/run_tests.sh --test=<id>` | run targeted harness scope by stable test ID (still finish with full gate) |
+| `bash tests/run_tests.sh --section=<n>` | run targeted harness scope by section number |
+| `bash tests/run_tests.sh --changed` | infer targeted scope from changed files |
+| `bash tests/run_tests.sh --json` | full harness + structured JSON summary |
 | `PIXEL_TESTS_NO_CLONE=1 bash tests/run_tests.sh` | fast local pass (dev convenience; never the final gate) |
 | `PIXEL_TEST_TIMINGS=1 bash tests/run_tests.sh` | per-test elapsed times on stderr |
-| `bash scripts/ci-local.sh` | the CI gate chain locally: whitespace, checksum lockstep, action pins, syntax, shellcheck, full suite — fail-fast |
+| `bash scripts/ci-local.sh` | the CI gate chain locally: whitespace, checksum lockstep, policy checks, syntax, shellcheck, full suite — fail-fast |
+| `bash scripts/ci-local.sh --json` | same CI gate chain with structured JSON summary |
 | `python3 scripts/check-github-action-pins.py` | enforce the workflow pinning policy (`docs/GITHUB_ACTIONS_PINNING_POLICY.md`): every external action SHA-pinned with a version comment |
+| `python3 scripts/check-agent-instructions.py` | verify required agent-instruction hierarchy and manifest/router scaffolding |
+| `python3 scripts/check-doc-command-parity.py` | detect stale command references across key docs |
+| `python3 scripts/check-evidence-links.py` | detect broken `evidence/...` references in docs/reports |
+| `python3 scripts/check-cli-contracts.py` | detect CLI contract drift between scripts and `docs/CLI_CONTRACT.md` |
+| `python3 scripts/check-test-registration.py` | ensure harness sections are registered in `tests/section-map.tsv` |
 
 ## Editing a checksummed script
 

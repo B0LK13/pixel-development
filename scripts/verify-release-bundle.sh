@@ -111,6 +111,14 @@ MCOMMIT="$(jget "$META" commit)"
   || fail failed-metadata "unknown signature algorithm: $(jget "$META" signature_algorithm)"
 [ "$(jget "$META" signature_required)" = "false" ] \
   || fail failed-metadata "signature_required must be false (policy is the verifier's, not the bundle's)"
+if [ "$(jget "$META" valid_for_release 2>/dev/null)" = "false" ] || [ "$(jget "$META" status 2>/dev/null)" = "placeholder" ]; then
+  fail failed-policy "RELEASE-METADATA.json marked valid_for_release=false or status=placeholder (placeholder/scaffolding evidence cannot satisfy release completion)"
+fi
+if [ -f "$BUNDLE/SIGNING-EVIDENCE.json" ]; then
+  if [ "$(jget "$BUNDLE/SIGNING-EVIDENCE.json" valid_for_release 2>/dev/null)" = "false" ] || [ "$(jget "$BUNDLE/SIGNING-EVIDENCE.json" status 2>/dev/null)" = "placeholder" ]; then
+    fail failed-policy "SIGNING-EVIDENCE.json marked valid_for_release=false or status=placeholder (placeholder/scaffolding evidence cannot satisfy release completion)"
+  fi
+fi
 
 # artifacts: strict single-line object shape, then set/role/mode policy
 ART_RE='^    \{ "path": "[a-z0-9.-]+", "sha256": "[0-9a-f]{64}", "mode": "0[0-7]{3}", "role": "[a-z-]+" \},?$'
