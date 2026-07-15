@@ -1805,12 +1805,14 @@ if [ -n "$changed_reason_clone" ]; then
 fi
 if [ -n "$changed_reason_clone" ]; then
   git -C "$changed_reason_clone" add tests/run_tests.sh tests/run_tests_support.sh
-  if ! git -C "$changed_reason_clone" \
-    -c user.name='Agent OS fixture' \
-    -c user.email='fixture@example.invalid' \
-    -c commit.gpgSign=false commit -qm 'test: seed changed-selection harness'; then
-    t_fail "run_tests --changed reason output" "could not commit harness fixture"
-    changed_reason_clone=''
+  if ! git -C "$changed_reason_clone" diff --cached --quiet; then
+    if ! git -C "$changed_reason_clone" \
+      -c user.name='Agent OS fixture' \
+      -c user.email='fixture@example.invalid' \
+      -c commit.gpgSign=false commit -qm 'test: seed changed-selection harness'; then
+      t_fail "run_tests --changed reason output" "could not commit harness fixture"
+      changed_reason_clone=''
+    fi
   fi
 fi
 if [ -n "$changed_reason_clone" ]; then
@@ -1906,12 +1908,14 @@ if [ -n "$gitignore_clone" ]; then
   cp "$ROOT/tests/run_tests.sh" "$gitignore_clone/tests/run_tests.sh"
   cp "$ROOT/tests/run_tests_support.sh" "$gitignore_clone/tests/run_tests_support.sh"
   git -C "$gitignore_clone" add tests/run_tests.sh tests/run_tests_support.sh
-  if ! git -C "$gitignore_clone" \
-    -c user.name='Agent OS fixture' \
-    -c user.email='fixture@example.invalid' \
-    -c commit.gpgSign=false commit -qm 'test: seed gitignore harness'; then
-    t_fail ".gitignore changed selection" "could not commit harness fixture"
-    gitignore_clone=''
+  if ! git -C "$gitignore_clone" diff --cached --quiet; then
+    if ! git -C "$gitignore_clone" \
+      -c user.name='Agent OS fixture' \
+      -c user.email='fixture@example.invalid' \
+      -c commit.gpgSign=false commit -qm 'test: seed gitignore harness'; then
+      t_fail ".gitignore changed selection" "could not commit harness fixture"
+      gitignore_clone=''
+    fi
   fi
 fi
 if [ -n "$gitignore_clone" ]; then
@@ -1958,14 +1962,17 @@ if [ -n "$missing_base_clone" ]; then
   cp "$ROOT/tests/run_tests.sh" "$missing_base_clone/tests/run_tests.sh"
   cp "$ROOT/tests/run_tests_support.sh" "$missing_base_clone/tests/run_tests_support.sh"
   git -C "$missing_base_clone" add tests/run_tests.sh tests/run_tests_support.sh
-  if ! git -C "$missing_base_clone" \
-    -c user.name='Agent OS fixture' \
-    -c user.email='fixture@example.invalid' \
-    -c commit.gpgSign=false commit -qm 'test: seed missing-base harness'; then
-    t_fail "missing base ref check" "could not commit harness fixture"
-    missing_base_clone=''
+  if ! git -C "$missing_base_clone" diff --cached --quiet; then
+    if ! git -C "$missing_base_clone" \
+      -c user.name='Agent OS fixture' \
+      -c user.email='fixture@example.invalid' \
+      -c commit.gpgSign=false commit -qm 'test: seed missing-base harness'; then
+      t_fail "missing base ref check" "could not commit harness fixture"
+      missing_base_clone=''
+    fi
   fi
 fi
+
 out=''
 if [ -n "$missing_base_clone" ] && out="$(cd "$missing_base_clone" && \
   bash tests/run_tests.sh --changed --base missing-branch-9999 2>&1)"; then
