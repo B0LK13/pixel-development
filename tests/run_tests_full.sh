@@ -1040,10 +1040,13 @@ if grep -qE -- '--(version|output-dir|bundle|signature|keyring) ' "$WF"; then
 else
   t_ok "workflow release job uses equals-form flags (release tools are equals-only)"
 fi
-if grep -qF 'scripts/build-release-candidate.sh' "$ROOT/tests/run_tests.sh" \
-   && grep -qF 'scripts/verify-release-bundle.sh' "$ROOT/tests/run_tests.sh"; then
+if grep -qF 'scripts/build-release-candidate.sh' \
+     "$ROOT/tests/run_tests.sh" "$ROOT/tests/run_tests_support.sh" \
+   && grep -qF 'scripts/verify-release-bundle.sh' \
+     "$ROOT/tests/run_tests.sh" "$ROOT/tests/run_tests_support.sh"; then
   t_ok "CI parity: release mechanisms also covered by the hermetic suite (ci-local gate 5)"
 else t_fail "CI parity release" "harness lost release coverage"; fi
+
 if grep -qiE 'gh release|git push|create-release|action-gh-release' "$WF"; then
   t_fail "workflow publishes or pushes" "release/push step found"
 else
@@ -1737,7 +1740,6 @@ if [ -f "$ROOT/.github/dependabot.yml" ] \
   t_ok "dependabot.yml: github-actions ecosystem updates configured"
 else t_fail "dependabot config" "missing or incomplete"; fi
 
-changed_smoke_skip="$(awk -F '\t' 'NF>=2 && $1 != 0 {print $1}' "$ROOT/tests/section-map.tsv" | paste -sd, -)"
 
 # --- 31. agent operating system checks (session 14) ------------------------------
 # Repository-native agent operating system: required docs/manifests/checkers,
@@ -1784,7 +1786,37 @@ else t_fail "run_tests --test failed" "$out"; fi
 if out="$(bash "$ROOT/tests/run_tests.sh" --tag workflow 2>&1)"; then
   t_ok "run_tests --tag selects tagged checks"
 else t_fail "run_tests --tag failed" "$out"; fi
-if out="$(PIXEL_SKIP_SECTION_IDS="$changed_smoke_skip" bash "$ROOT/tests/run_tests.sh" --changed --base main 2>&1)"; then
+changed_reason_clone="$tmp/changed-reason-clone"
+git clone -q --local "$ROOT" "$changed_reason_clone" 2>/dev/null || {
+  t_fail "run_tests --changed reason output" "could not create fixture clone"
+  changed_reason_clone=''
+}
+if [ -n "$changed_reason_clone" ]; then
+  cp "$ROOT/tests/run_tests.sh" "$changed_reason_clone/tests/run_tests.sh" || {
+    t_fail "run_tests --changed reason output" "could not seed harness fixture"
+    changed_reason_clone=''
+  }
+fi
+if [ -n "$changed_reason_clone" ]; then
+  cp "$ROOT/tests/run_tests_support.sh" "$changed_reason_clone/tests/run_tests_support.sh" || {
+    t_fail "run_tests --changed reason output" "could not seed harness support fixture"
+    changed_reason_clone=''
+  }
+fi
+if [ -n "$changed_reason_clone" ]; then
+  git -C "$changed_reason_clone" add tests/run_tests.sh tests/run_tests_support.sh
+  if ! git -C "$changed_reason_clone" \
+    -c user.name='Agent OS fixture' \
+    -c user.email='fixture@example.invalid' \
+    -c commit.gpgSign=false commit -qm 'test: seed changed-selection harness'; then
+    t_fail "run_tests --changed reason output" "could not commit harness fixture"
+    changed_reason_clone=''
+  fi
+fi
+if [ -n "$changed_reason_clone" ]; then
+  printf '\n# agent-os probe: temporary .gitignore selection test\n' >> "$changed_reason_clone/.gitignore"
+fi
+if [ -n "$changed_reason_clone" ] && out="$(cd "$changed_reason_clone" && bash tests/run_tests.sh --changed --base HEAD 2>&1)"; then
   case "$out" in *"selection reasons"*) t_ok "run_tests --changed reports selection reasons" ;; *) t_fail "run_tests --changed reason output" "$out" ;; esac
 else t_fail "run_tests --changed failed" "$out"; fi
 if out="$(bash "$ROOT/tests/run_tests.sh" --test=workflow.action-pins --format=json 2>&1)"; then
@@ -1859,11 +1891,51 @@ else
   t_ok "duplicate check IDs check: catches duplicate check IDs"
 fi
 
-# 32e. dirty tree detection via --changed
-if out="$(PIXEL_SKIP_SECTION_IDS="$changed_smoke_skip" bash "$ROOT/tests/run_tests.sh" --changed 2>&1)"; then
-  t_ok "dirty tree check: --changed runs cleanly against dirty/untracked tree"
+# The support module is tested directly so fallback coverage cannot launch the
+# full suite that contains these assertions.
+# shellcheck source=tests/run_tests_support.sh
+source "$ROOT/tests/run_tests_support.sh"
+
+# 32e. .gitignore changes stay in the targeted baseline and never recurse.
+gitignore_clone="$tmp/gitignore-path-clone"
+git clone -q --local "$ROOT" "$gitignore_clone" 2>/dev/null || {
+  t_fail ".gitignore changed selection" "could not create fixture clone"
+  gitignore_clone=''
+}
+if [ -n "$gitignore_clone" ]; then
+  cp "$ROOT/tests/run_tests.sh" "$gitignore_clone/tests/run_tests.sh"
+  cp "$ROOT/tests/run_tests_support.sh" "$gitignore_clone/tests/run_tests_support.sh"
+  git -C "$gitignore_clone" add tests/run_tests.sh tests/run_tests_support.sh
+  if ! git -C "$gitignore_clone" \
+    -c user.name='Agent OS fixture' \
+    -c user.email='fixture@example.invalid' \
+    -c commit.gpgSign=false commit -qm 'test: seed gitignore harness'; then
+    t_fail ".gitignore changed selection" "could not commit harness fixture"
+    gitignore_clone=''
+  fi
+fi
+if [ -n "$gitignore_clone" ]; then
+  printf '\n# agent-os probe: temporary .gitignore selection test\n' >> "$gitignore_clone/.gitignore"
+fi
+out=''
+if [ -n "$gitignore_clone" ] && out="$(cd "$gitignore_clone" && \
+  bash tests/run_tests.sh --changed --base HEAD --format json 2>&1)"; then
+
+  case "$out" in *'"mode": "targeted"'*'"full_gate": false'*'"selected_sections": [0]'*'.gitignore'*)
+    t_ok ".gitignore changed selection stays targeted at section 0"
+    ;;
+  *)
+    t_fail ".gitignore changed selection" "$out"
+    ;;
+  esac
 else
-  t_fail "dirty tree check: --changed failed" "$out"
+  t_fail ".gitignore changed selection" "$out"
+fi
+[ -z "$gitignore_clone" ] || rm -rf -- "$gitignore_clone"
+if [ -z "$gitignore_clone" ] || [ ! -e "$gitignore_clone" ]; then
+  t_ok ".gitignore changed-selection fixture is cleaned"
+else
+  t_fail ".gitignore changed-selection cleanup" "$gitignore_clone remains"
 fi
 
 # 32f. shallow clone guard
@@ -1877,18 +1949,152 @@ else
 fi
 
 # 32g. missing base ref fallback
-if out="$(PIXEL_SKIP_SECTION_IDS="$changed_smoke_skip" bash "$ROOT/tests/run_tests.sh" --changed --base missing-branch-9999 2>&1)"; then
-  case "$out" in *"missing/invalid base ref"*|*"conservative fallback"*) t_ok "missing base ref check: conservatively falls back or warns" ;; *) t_ok "missing base ref check: handled cleanly" ;; esac
+missing_base_clone="$tmp/missing-base-clone"
+git clone -q --local "$ROOT" "$missing_base_clone" 2>/dev/null || {
+  t_fail "missing base ref check" "could not create fixture clone"
+  missing_base_clone=''
+}
+if [ -n "$missing_base_clone" ]; then
+  cp "$ROOT/tests/run_tests.sh" "$missing_base_clone/tests/run_tests.sh"
+  cp "$ROOT/tests/run_tests_support.sh" "$missing_base_clone/tests/run_tests_support.sh"
+  git -C "$missing_base_clone" add tests/run_tests.sh tests/run_tests_support.sh
+  if ! git -C "$missing_base_clone" \
+    -c user.name='Agent OS fixture' \
+    -c user.email='fixture@example.invalid' \
+    -c commit.gpgSign=false commit -qm 'test: seed missing-base harness'; then
+    t_fail "missing base ref check" "could not commit harness fixture"
+    missing_base_clone=''
+  fi
+fi
+out=''
+if [ -n "$missing_base_clone" ] && out="$(cd "$missing_base_clone" && \
+  bash tests/run_tests.sh --changed --base missing-branch-9999 2>&1)"; then
+  case "$out" in *"missing/invalid base ref"*|*"conservative fallback"*)
+    t_ok "missing base ref check: conservatively falls back or warns"
+    ;;
+  *) t_ok "missing base ref check: handled cleanly" ;;
+  esac
 else
   t_fail "missing base ref check: unexpected failure" "$out"
 fi
+[ -z "$missing_base_clone" ] || rm -rf -- "$missing_base_clone"
 
-# 32h. unknown changed-file mapping fallback
-if out="$(PIXEL_SKIP_SECTION_IDS="$changed_smoke_skip" bash "$ROOT/tests/run_tests.sh" --changed 2>&1)"; then
-  t_ok "unknown changed-file check: conservative fallback works"
+
+# 32h. unknown paths select the internal full runner exactly once and propagate
+#      both success and failure without launching this top-level suite.
+SECTIONS=''
+REASONS=''
+if classify_changed_path '.run-tests-unknown-path'; then
+  t_fail "unknown changed-file classification" "unknown path was treated as targeted"
 else
-  t_fail "unknown changed-file check: unexpected error" "$out"
+  case "$REASONS" in *"unknown changed path '.run-tests-unknown-path' selects full gate"*)
+    t_ok "unknown changed-file classification selects conservative full fallback"
+    ;;
+  *) t_fail "unknown changed-file classification" "$REASONS" ;;
+  esac
 fi
+
+known_sections='5,6,10,11,13,15'
+SECTIONS=''
+REASONS=''
+if classify_changed_path 'pixel-autodev.sh' && [ "$SECTIONS" = "$known_sections" ]; then
+  t_ok "known changed-file classification preserves targeted scope"
+else
+  t_fail "known changed-file classification" "sections=$SECTIONS reasons=$REASONS"
+fi
+
+runner_probe="$tmp/run-tests-internal-full-runner"
+mkdir -p "$runner_probe"
+runner_stub="$runner_probe/full-core-stub.sh"
+runner_marker="$runner_probe/entries.log"
+runner_log="$runner_probe/full-core.log"
+cat > "$runner_stub" <<'EOF'
+#!/usr/bin/env bash
+set -uo pipefail
+printf 'harness-entry\n' >> "$RUNNER_MARKER"
+if [ "$RUNNER_RC" -eq 0 ]; then
+  echo 'internal-full-runner: success'
+  echo 'passed: 1   failed: 0   skipped: 0'
+else
+  echo 'internal-full-runner: failure'
+  echo 'passed: 0   failed: 1   skipped: 0'
+fi
+exit "$RUNNER_RC"
+EOF
+chmod +x "$runner_stub"
+export RUNNER_MARKER="$runner_marker" RUNNER_RC=0
+CHILD_PID=''
+if run_harness_core "$runner_stub" "$runner_log" 1 \
+  && [ "$(grep -c '^harness-entry$' "$runner_marker")" -eq 1 ] \
+  && [ "$(grep -c '^passed: 1   failed: 0   skipped: 0$' "$runner_log")" -eq 1 ] \
+  && grep -q '^internal-full-runner: success$' "$runner_log"; then
+  t_ok "unknown changed-file fallback invokes internal full runner once"
+else
+  t_fail "unknown changed-file fallback success" "$(cat "$runner_log" 2>/dev/null)"
+fi
+
+: > "$runner_marker"
+export RUNNER_RC=7
+runner_rc=0
+run_harness_core "$runner_stub" "$runner_log" 1 || runner_rc=$?
+if [ "$runner_rc" -eq 7 ] \
+  && [ "$(grep -c '^harness-entry$' "$runner_marker")" -eq 1 ] \
+  && grep -q '^internal-full-runner: failure$' "$runner_log" \
+  && ! grep -q '^internal-full-runner: success$' "$runner_log"; then
+  t_ok "unknown changed-file fallback propagates internal full-runner failure"
+else
+  t_fail "unknown changed-file failure propagation" "rc=$runner_rc output=$(cat "$runner_log" 2>/dev/null)"
+fi
+unset RUNNER_MARKER RUNNER_RC
+
+guard_clone="$tmp/external-recursion-guard-clone"
+guard_marker="$tmp/external-recursion-core-started"
+git clone -q --local "$ROOT" "$guard_clone" 2>/dev/null || {
+  t_fail "external recursion guard" "could not create fixture clone"
+  guard_clone=''
+}
+if [ -n "$guard_clone" ]; then
+  cp "$ROOT/tests/run_tests.sh" "$guard_clone/tests/run_tests.sh"
+  cp "$ROOT/tests/run_tests_support.sh" "$guard_clone/tests/run_tests_support.sh"
+  cat > "$guard_clone/tests/run_tests_full.sh" <<EOF
+#!/usr/bin/env bash
+touch "$guard_marker"
+exit 0
+EOF
+  chmod +x "$guard_clone/tests/run_tests_full.sh"
+fi
+out=''
+if [ -n "$guard_clone" ] && out="$(PIXEL_HARNESS_ACTIVE=1 \
+  bash "$guard_clone/tests/run_tests.sh" --format json 2>&1)"; then
+  t_fail "external recursion guard: nested full gate should be rejected" "$out"
+else
+  case "$out" in *"recursive full harness invocation detected"*)
+    if [ ! -e "$guard_marker" ]; then
+      t_ok "external recursion guard still blocks nested full gate before core starts"
+    else
+      t_fail "external recursion guard" "fixture core started"
+    fi
+    ;;
+  *)
+    t_fail "external recursion guard" "$out"
+    ;;
+  esac
+fi
+[ -z "$guard_clone" ] || rm -rf -- "$guard_clone"
+rm -rf -- "$runner_probe" "$guard_marker"
+if [ ! -e "$runner_probe" ] && { [ -z "$guard_clone" ] || [ ! -e "$guard_clone" ]; } \
+  && [ ! -e "$guard_marker" ]; then
+  t_ok "fallback probes leave no temporary paths or processes"
+else
+  t_fail "fallback probe cleanup" "temporary path remains"
+fi
+
+if [ -z "${CHILD_PID:-}" ]; then
+  t_ok "fallback probes leave no duplicate harness child"
+else
+  t_fail "fallback duplicate harness child" "pid=$CHILD_PID"
+fi
+
 
 # 32i. invalid selector rejection
 if bash "$ROOT/tests/run_tests.sh" --section=99999 >/dev/null 2>&1; then

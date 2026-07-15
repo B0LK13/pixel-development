@@ -10,6 +10,7 @@ ROOT="$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd -P)" || {
   echo "run_tests: cannot resolve repo root" >&2; exit 1; }
 CORE="$SCRIPT_DIR/run_tests_full.sh"
 MAP="$SCRIPT_DIR/section-map.tsv"
+SUPPORT="$SCRIPT_DIR/run_tests_support.sh"
 
 die_usage(){ echo "run_tests: $*" >&2; exit 2; }
 
@@ -24,14 +25,8 @@ BASE_REF=''
 SECTIONS=''
 REASONS=''
 
-append_unique(){
-  local val="$1"
-  case ",$SECTIONS," in *,"$val",*) ;; *) SECTIONS="${SECTIONS:+$SECTIONS,}$val" ;; esac
-}
-add_reason(){
-  REASONS="${REASONS}${REASONS:+
-}$1"
-}
+# shellcheck source=tests/run_tests_support.sh
+source "$SUPPORT" || { echo "run_tests: cannot load $SUPPORT" >&2; exit 1; }
 json_escape(){ printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g; s/\n/\\n/g'; }
 
 while [ $# -gt 0 ]; do
@@ -73,6 +68,7 @@ fi
 
 [ -f "$CORE" ] || { echo "run_tests: missing $CORE" >&2; exit 1; }
 [ -f "$MAP" ] || { echo "run_tests: missing $MAP" >&2; exit 1; }
+[ -f "$SUPPORT" ] || { echo "run_tests: missing $SUPPORT" >&2; exit 1; }
 
 # section_id\tcheck_id\ttitle\tdeps\ttags\tduration\tplatforms
 map_rows(){ awk -F '\t' 'NF>=7 && $1 !~ /^#/ {print}' "$MAP"; }
@@ -182,26 +178,10 @@ ${local_diff}"
       fi
       while IFS= read -r p; do
         [ -n "$p" ] || continue
-        case "$p" in
-          .github/*) append_unique 22; append_unique 30; add_reason "changed path: $p -> workflow/ci checks" ;;
-          README.md|CLAUDE.md) append_unique 21; append_unique 28; append_unique 29; append_unique 31; add_reason "changed path: $p -> repo docs checks" ;;
-          harness/*) append_unique 31; append_unique 32; append_unique 22; add_reason "changed path: $p -> harness checks" ;;
-          .codebase-memory/*) add_reason "changed path: $p -> local session cache ignored" ;;
-          tests/*) append_unique 1; append_unique 2; append_unique 8; append_unique 22; append_unique 31; append_unique 32; add_reason "changed path: $p -> harness checks" ;;
-          scripts/check-*|AGENTS.md|.agent/*|schemas/*) append_unique 31; append_unique 32; append_unique 22; add_reason "changed path: $p -> agent-os checks" ;;
-          scripts/update-bootstrap-checksums.sh|config/bootstrap-checksums.txt) append_unique 16; append_unique 20; add_reason "changed path: $p -> checksum checks" ;;
-          pixel-bootstrap.sh|pixel-dev-setup.sh|pixel-apps-setup.sh) append_unique 16; append_unique 17; append_unique 18; add_reason "changed path: $p -> bootstrap checks" ;;
-          pixel-autodev.sh) append_unique 5; append_unique 6; append_unique 10; append_unique 11; append_unique 13; append_unique 15; add_reason "changed path: $p -> autodev checks" ;;
-          scripts/build-release-candidate.sh) append_unique 24; append_unique 27; add_reason "changed path: $p -> release builder checks" ;;
-          scripts/verify-release-bundle.sh) append_unique 25; append_unique 26; append_unique 28; add_reason "changed path: $p -> release verifier checks" ;;
-          scripts/*) append_unique 22; append_unique 31; append_unique 32; add_reason "changed path: $p -> scripts checks" ;;
-          docs/*|reports/*|evidence/*) append_unique 21; append_unique 28; append_unique 29; append_unique 31; add_reason "changed path: $p -> docs/evidence checks" ;;
-          *)
-            add_reason "conservative fallback: unknown changed path '$p' selects full gate"
-            fallback_to_full=1
-            break
-            ;;
-        esac
+        if ! classify_changed_path "$p"; then
+          fallback_to_full=1
+          break
+        fi
       done <<EOF
 $changed_paths
 EOF
@@ -258,6 +238,9 @@ if [ -n "$SECTIONS" ] || [ "$CHANGED" -eq 1 ] || [ -n "$SECTION_RAW" ] || [ -n "
     mode='targeted'
   fi
   is_full_gate=false
+  if [ "$CHANGED" -eq 1 ] && [ "${fallback_to_full:-0}" -eq 1 ]; then
+    is_full_gate=true
+  fi
 fi
 
 LOCK_DIR="$ROOT/reports/logs/run_tests.full.lockdir"
@@ -452,33 +435,13 @@ function is_sel(s){ return index(ENVIRON["selected"], "," s ",") != 0 }
 rc=0
 export PIXEL_HARNESS_ACTIVE=1
 if [ "$mode" = "full" ]; then
-  if [ "$AS_JSON" = 1 ]; then
-    bash "$CORE" > "$LOG_FILE" 2>&1 &
-    CHILD_PID=$!
-    wait "$CHILD_PID" || rc=$?
-    CHILD_PID=''
-  else
-    bash "$CORE" 2>&1 | tee "$LOG_FILE" &
-    CHILD_PID=$!
-    wait "$CHILD_PID" || rc=$?
-    CHILD_PID=''
-  fi
+  run_harness_core "$CORE" "$LOG_FILE" "$AS_JSON" || rc=$?
 else
   tmp="$(mktemp "${TMPDIR:-/tmp}/pixel-targeted-tests.XXXXXX")"
   build_targeted_runner "$SECTIONS" > "$tmp"
   sed -i "s|^ROOT=.*|ROOT=\"$ROOT\"|" "$tmp"
   chmod +x "$tmp"
-  if [ "$AS_JSON" = 1 ]; then
-    bash "$tmp" > "$LOG_FILE" 2>&1 &
-    CHILD_PID=$!
-    wait "$CHILD_PID" || rc=$?
-    CHILD_PID=''
-  else
-    bash "$tmp" 2>&1 | tee "$LOG_FILE" &
-    CHILD_PID=$!
-    wait "$CHILD_PID" || rc=$?
-    CHILD_PID=''
-  fi
+  run_harness_core "$tmp" "$LOG_FILE" "$AS_JSON" || rc=$?
 fi
 end_ts="$(date +%s)"; dur="$((end_ts-start_ts))"
 
