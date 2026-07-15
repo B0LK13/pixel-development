@@ -10,6 +10,9 @@
 6. **CI parity runner**: `scripts/ci-local.sh`.
 7. **Policy checks**: `scripts/check-*.py`.
 8. **Evidence/report plane**: `evidence/` and `reports/`.
+9. **Phase 0 architecture baseline**: `docs/architecture/` (current system-context,
+   control/data flows, trust boundaries, catalogues, risks, debt, and Phase 1
+   entry criteria).
 
 ## Control flow
 
@@ -50,4 +53,3 @@ Agent
 - If extracted into a standalone harness later, keep repository adapters thin and preserve:
   - `bash tests/run_tests.sh`
   - `bash scripts/ci-local.sh`
-
