@@ -1747,6 +1747,15 @@ else t_fail "dependabot config" "missing or incomplete"; fi
 for f in AGENTS.md .github/AGENTS.md scripts/AGENTS.md tests/AGENTS.md docs/AGENTS.md \
          docs/AGENT_ARCHITECTURE.md docs/AGENT_WORKFLOW_CONTRACT.md docs/AGENT_SECURITY_BOUNDARIES.md \
          docs/AGENT_TEST_STRATEGY.md docs/AGENT_HANDOFF_PROTOCOL.md \
+         docs/architecture/README.md docs/architecture/system-context.md \
+         docs/architecture/current-state.md docs/architecture/component-map.md \
+         docs/architecture/control-flow.md docs/architecture/data-flow.md \
+         docs/architecture/trust-boundaries.md docs/architecture/action-catalog.md \
+         docs/architecture/validation-catalog.md docs/architecture/runtime-compatibility.md \
+         docs/architecture/evidence-model.md docs/architecture/governance-model.md \
+         docs/architecture/risk-register.md docs/architecture/technical-debt-register.md \
+         docs/architecture/roadmap-mapping.md docs/architecture/phase-1-entry-criteria.md \
+         docs/architecture/terminology.md docs/architecture/decisions/README.md \
          .agent/repository-manifest.yaml .agent/task-router.yaml .agent/skills/index.yaml \
          scripts/agent-context.sh scripts/check-agent-instructions.py scripts/check-doc-command-parity.py \
          scripts/check-evidence-links.py scripts/check-cli-contracts.py scripts/check-test-registration.py \
@@ -1830,6 +1839,44 @@ else t_fail "agent-context --format json failed" "$out"; fi
 if out="$(PIXEL_CI_SKIP_FULL_HARNESS=1 bash "$ROOT/scripts/ci-local.sh" --format json 2>&1)"; then
   case "$out" in *'"steps"'*'"exit_code"'*) t_ok "ci-local --json emits structured result" ;; *) t_fail "ci-local --json output" "$out" ;; esac
 else t_fail "ci-local --json failed" "$out"; fi
+for f in docs/architecture/README.md docs/architecture/system-context.md \
+         docs/architecture/current-state.md docs/architecture/component-map.md \
+         docs/architecture/control-flow.md docs/architecture/data-flow.md \
+         docs/architecture/trust-boundaries.md docs/architecture/action-catalog.md \
+         docs/architecture/validation-catalog.md docs/architecture/runtime-compatibility.md \
+         docs/architecture/evidence-model.md docs/architecture/governance-model.md \
+         docs/architecture/risk-register.md docs/architecture/technical-debt-register.md \
+         docs/architecture/roadmap-mapping.md docs/architecture/phase-1-entry-criteria.md \
+         docs/architecture/terminology.md docs/architecture/decisions/README.md; do
+  [ -f "$ROOT/$f" ] && t_ok "architecture doc present: $f" || t_fail "architecture doc missing: $f"
+done
+for spec in \
+  "docs/architecture/README.md:Architecture Baseline" \
+  "docs/architecture/system-context.md:System Context" \
+  "docs/architecture/current-state.md:Current State" \
+  "docs/architecture/component-map.md:Component Map" \
+  "docs/architecture/control-flow.md:Control Flow" \
+  "docs/architecture/data-flow.md:Data Flow" \
+  "docs/architecture/trust-boundaries.md:Trust Boundaries" \
+  "docs/architecture/action-catalog.md:Action Catalog" \
+  "docs/architecture/validation-catalog.md:Validation Catalog" \
+  "docs/architecture/runtime-compatibility.md:Runtime Compatibility" \
+  "docs/architecture/evidence-model.md:Evidence Model" \
+  "docs/architecture/governance-model.md:Governance Model" \
+  "docs/architecture/risk-register.md:Risk Register" \
+  "docs/architecture/technical-debt-register.md:Technical Debt Register" \
+  "docs/architecture/roadmap-mapping.md:Roadmap Mapping" \
+  "docs/architecture/phase-1-entry-criteria.md:Phase 1 Entry Criteria" \
+  "docs/architecture/terminology.md:Terminology" \
+  "docs/architecture/decisions/README.md:Decisions"; do
+  file="${spec%%:*}"
+  heading="${spec#*:}"
+  if grep -qF "$heading" "$ROOT/$file"; then
+    t_ok "architecture doc heading present: $file"
+  else
+    t_fail "architecture doc heading missing: $file" "want heading: $heading"
+  fi
+done
 
 # --- 32. agent-os harness robustness & recovery checks (session 15) -----------------
 # 32a. child failure returns non-zero and never claims success
