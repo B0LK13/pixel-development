@@ -270,6 +270,7 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
             try:
                 import signal as _signal, traceback as _traceback
                 def _term_handler(signum, frame):
+                    # write signal and stack to monitor.err for forensic purposes
                     try:
                         with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
                             me.write(f'Received signal: {signum}\n')
@@ -279,6 +280,37 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                 pass
                     except Exception:
                         pass
+                    # attempt a conservative short-lived reconciliation: mark run as recovery-required if not terminal
+                    try:
+                        import sqlite3 as _sqlite
+                        try:
+                            fb = _sqlite.connect(DB_PATH, timeout=5)
+                            fb.execute('PRAGMA journal_mode=WAL;')
+                            try:
+                                with fb:
+                                    cur = fb.cursor()
+                                    cur.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
+                                    row = cur.fetchone()
+                                    now_status = row[0] if row else None
+                                    if now_status not in ('completed','failed','timed_out'):
+                                        fb.execute('UPDATE runs SET status=?, updated_at=?, abandon_reason=? WHERE run_uuid=?', ('recovery-required', now_iso(), 'monitor-terminated', run_uuid))
+                                        fb.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, now_status or 'running', 'recovery-required', 'monitor', 'monitor-terminated', json.dumps({'signal': signum}), now_iso()))
+                                        try:
+                                            os.makedirs(run_dir, exist_ok=True)
+                                            with open(os.path.join(run_dir, 'monitor.finalization.json'), 'w') as mf:
+                                                json.dump({'run_uuid': run_uuid, 'result': 'recovery-required', 'signal': signum, 'timestamp': now_iso()}, mf)
+                                        except Exception:
+                                            pass
+                        except Exception:
+                            pass
+                        finally:
+                            try:
+                                fb.close()
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    # exit with conventional code
                     os._exit(128 + signum)
                 try:
                     _signal.signal(_signal.SIGTERM, _term_handler)
