@@ -275,9 +275,19 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                 loop_count += 1
                 try:
                     pid_ret, status = os.waitpid(child_pid, os.WNOHANG)
-                except ChildProcessError:
+                except ChildProcessError as cpe:
                     pid_ret = 0
                     status = 0
+                    try:
+                        with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                            md.write(f'WAITPID ChildProcessError: {str(cpe)} child_pid={child_pid} proc_exists={os.path.exists(f"/proc/{child_pid}")}\n')
+                            md.flush()
+                            try:
+                                os.fsync(md.fileno())
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                 # diagnostic: log first waitpid result or any non-zero result
                 try:
                     if loop_count == 1 or pid_ret != 0:
