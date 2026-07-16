@@ -344,6 +344,78 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                 except Exception:
                     pass
 
+                # Safety enforcement: if elapsed passed timeout and no timeout transition recorded, proactively enter timeout handling.
+                try:
+                    if tsec and not timed_out and elapsed > float(tsec):
+                        # check transitions for an existing timeout record (conservative, non-racy)
+                        try:
+                            cur_check = mconn.cursor()
+                            cur_check.execute("SELECT COUNT(1) FROM transitions WHERE run_uuid=? AND new_status='timed_out'", (run_uuid,))
+                            has_to = cur_check.fetchone()[0]
+                        except Exception:
+                            has_to = 0
+                        if not has_to:
+                            try:
+                                with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                    md.write(f'ENFORCE_TIMEOUT: elapsed={elapsed:.3f} tsec={tsec} has_timeout_transition={has_to}\n')
+                                    md.flush()
+                                    try:
+                                        os.fsync(md.fileno())
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                            # follow original timeout handling: send SIGTERM and persist timed_out
+                            timed_out = True
+                            timeout_detected_at = now_iso()
+                            try:
+                                if child_pgid:
+                                    os.killpg(child_pgid, 15)
+                                else:
+                                    os.kill(child_pid, 15)
+                            except Exception:
+                                pass
+                            try:
+                                with mconn:
+                                    mconn.execute('UPDATE runs SET status=?, timeout_detected_at=?, updated_at=? WHERE run_uuid=?', ('timed_out', timeout_detected_at, timeout_detected_at, run_uuid))
+                                    mconn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, 'running', 'timed_out', 'monitor', 'timeout-detected', json.dumps({'timeout_seconds': tsec}), timeout_detected_at))
+                            except Exception:
+                                pass
+                            # now wait grace and attempt to reap
+                            waited = 0
+                            while waited < grace:
+                                try:
+                                    pid_ret2, status2 = os.waitpid(child_pid, os.WNOHANG)
+                                    if pid_ret2 == child_pid:
+                                        pid_ret = pid_ret2
+                                        status = status2
+                                        break
+                                except ChildProcessError:
+                                    break
+                                time.sleep(1)
+                                waited += 1
+                            try:
+                                pid_ret3, _ = os.waitpid(child_pid, os.WNOHANG)
+                                if pid_ret3 == 0:
+                                    try:
+                                        if child_pgid:
+                                            os.killpg(child_pgid, 9)
+                                        else:
+                                            os.kill(child_pid, 9)
+                                        escal = 1
+                                    except Exception:
+                                        escal = 0
+                                    try:
+                                        with mconn:
+                                            mconn.execute('UPDATE runs SET escalated_to_sigkill=?, updated_at=? WHERE run_uuid=?', (escal, now_iso(), run_uuid))
+                                            mconn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, 'timed_out', 'timed_out', 'monitor', 'escalated-to-sigkill', json.dumps({'escalated': escal}), now_iso()))
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
                 if pid_ret == child_pid:
                     # debug write: reaped child
                     try:
