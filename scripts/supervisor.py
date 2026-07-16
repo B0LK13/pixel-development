@@ -321,6 +321,18 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                             prev = None
 
                         for attempt, backoff in enumerate(retry_backoffs, start=1):
+                            # test-only fault injection: raise a transient sqlite error once when requested by environment
+                            try:
+                                inj = os.environ.get('SUPERVISOR_INJECT_FINALIZE_ERROR')
+                                inj_marker = os.path.join(run_dir, '.injected_finalization')
+                                if inj == '1' and not os.path.exists(inj_marker):
+                                    # create marker so injection happens only once per run
+                                    open(inj_marker, 'w').close()
+                                    raise _sqlite.OperationalError('injected finalization error')
+                            except Exception:
+                                # any exception here should be treated as injection-trigger or ignored
+                                pass
+
                             started_at_attempt = now_iso()
                             try:
                                 with mconn:
