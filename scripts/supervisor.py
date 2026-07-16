@@ -690,7 +690,7 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                     inj_marker = os.path.join(run_dir, '.injected_finalization')
                                     if inj == '1' and not os.path.exists(inj_marker):
                                         open(inj_marker, 'w').close()
-                                        raise _sqlite.OperationalError('injected finalization error')
+                                        raise _sqlite.OperationalError('database is locked')
                                     cur_check.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
                                     row_now = cur_check.fetchone()
                                     now_status = row_now[0] if row_now else None
