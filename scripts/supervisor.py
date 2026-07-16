@@ -553,6 +553,17 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                 pass
                     except Exception:
                         pass
+                    # write a before-finalize sentinel so an abrupt exit is detectable
+                    try:
+                        with open(os.path.join(run_dir, 'monitor.before-finalize'), 'w') as bf:
+                            bf.write(now_iso())
+                            bf.flush()
+                            try:
+                                os.fsync(bf.fileno())
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                     exit_code = None
                     sig = None
                     final_status = 'failed'
