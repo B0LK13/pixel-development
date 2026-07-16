@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-REPO_ROOT=$(pwd)
 DB=reports/run-supervision/supervisor.db
 # Ensure DB exists
 if [ ! -f "$DB" ]; then
