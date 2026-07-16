@@ -385,12 +385,46 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                     os.killpg(child_pgid, 15)
                                 else:
                                     os.kill(child_pid, 15)
-                            except Exception:
-                                pass
+                            except Exception as e_kill:
+                                try:
+                                    with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                        md.write(f'ENFORCE_TIMEOUT kill error: {str(e_kill)}\n')
+                                except Exception:
+                                    pass
                             try:
-                                with mconn:
-                                    mconn.execute('UPDATE runs SET status=?, timeout_detected_at=?, updated_at=? WHERE run_uuid=?', ('timed_out', timeout_detected_at, timeout_detected_at, run_uuid))
-                                    mconn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, 'running', 'timed_out', 'monitor', 'timeout-detected', json.dumps({'timeout_seconds': tsec}), timeout_detected_at))
+                                # record timeout transition with diagnostics
+                                try:
+                                    with mconn:
+                                        mconn.execute('UPDATE runs SET status=?, timeout_detected_at=?, updated_at=? WHERE run_uuid=?', ('timed_out', timeout_detected_at, timeout_detected_at, run_uuid))
+                                        mconn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, 'running', 'timed_out', 'monitor', 'timeout-detected', json.dumps({'timeout_seconds': tsec}), timeout_detected_at))
+                                    try:
+                                        with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                            md.write('ENFORCE_TIMEOUT db update committed\n')
+                                            md.flush()
+                                            try:
+                                                os.fsync(md.fileno())
+                                            except Exception:
+                                                pass
+                                    except Exception:
+                                        pass
+                                except Exception as e_db:
+                                    # write traceback for DB failure so it is visible
+                                    try:
+                                        import traceback as _tb
+                                        with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                                            me.write(_tb.format_exc())
+                                    except Exception:
+                                        pass
+                                    try:
+                                        with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                            md.write(f'ENFORCE_TIMEOUT db update failed: {str(e_db)}\n')
+                                            md.flush()
+                                            try:
+                                                os.fsync(md.fileno())
+                                            except Exception:
+                                                pass
+                                    except Exception:
+                                        pass
                             except Exception:
                                 pass
                             # now wait grace and attempt to reap
