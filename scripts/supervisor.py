@@ -481,6 +481,66 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                         except Exception:
                                             pass
 
+                # Final-resort forced finalization: if we've exceeded timeout + grace and still no transition or finalization artifact, perform one last idempotent short-lived commit and write monitor.finalization.json
+                try:
+                    forced_buf = 1.0
+                    if tsec and elapsed > (float(tsec) + float(grace) + forced_buf):
+                        final_path = os.path.join(run_dir, 'monitor.finalization.json')
+                        try:
+                            with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                md.write(f'FORCE_FINALIZE_CHECK elapsed={elapsed:.3f} tsec={tsec} grace={grace} final_exists={os.path.exists(final_path)}\n')
+                                md.flush()
+                                try:
+                                    os.fsync(md.fileno())
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                        if not os.path.exists(final_path):
+                            try:
+                                fb_conn2 = _sqlite.connect(DB_PATH, timeout=30)
+                                fb_conn2.execute('PRAGMA journal_mode=WAL;')
+                                try:
+                                    fb_conn2.execute('PRAGMA busy_timeout = 5000;')
+                                except Exception:
+                                    pass
+                            except Exception:
+                                fb_conn2 = None
+                            if fb_conn2:
+                                try:
+                                    with fb_conn2:
+                                        cur_now = fb_conn2.cursor()
+                                        cur_now.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
+                                        rn = cur_now.fetchone()
+                                        now_status = rn[0] if rn else None
+                                        if now_status not in ('completed','failed','timed_out'):
+                                            fb_conn2.execute('UPDATE runs SET status=?, finished_at=?, updated_at=? WHERE run_uuid=?', ('timed_out', now_iso(), now_iso(), run_uuid))
+                                            cur_t2 = fb_conn2.cursor()
+                                            cur_t2.execute('SELECT COUNT(1) FROM transitions WHERE run_uuid=? AND new_status=? AND source=? AND reason=?', (run_uuid, 'timed_out', 'monitor', 'timeout-detected'))
+                                            exists2 = cur_t2.fetchone()[0]
+                                            if not exists2:
+                                                fb_conn2.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, now_status or 'running', 'timed_out', 'monitor', 'timeout-detected', json.dumps({'forced': True}), now_iso()))
+                                        # write finalization artifact
+                                        try:
+                                            with open(final_path, 'w') as mf:
+                                                json.dump({'run_uuid': run_uuid, 'forced_finalization': True, 'final_status': 'timed_out', 'timestamp': now_iso()}, mf)
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    try:
+                                        with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                                            import traceback as _tb
+                                            me.write(_tb.format_exc())
+                                    except Exception:
+                                        pass
+                                finally:
+                                    try:
+                                        fb_conn2.close()
+                                    except Exception:
+                                        pass
+                except Exception:
+                    pass
+
                 except Exception:
                     pass
 
