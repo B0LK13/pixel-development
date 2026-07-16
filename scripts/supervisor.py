@@ -332,10 +332,11 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                     tsec = int(timeout_seconds or 0)
                     grace = int(grace_period or 5)
 
-                # diagnostic: log timeout check values
+                # diagnostic: log timeout check values and a loop tick timestamp
                 try:
                     with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
                         md.write(f'TIMEOUT_CHECK elapsed={elapsed:.3f} tsec={tsec} timed_out={timed_out} loop={loop_count}\n')
+                        md.write(f'LOOP_TICK now={now_iso()} monotonic={now_mon:.6f} loop={loop_count}\n')
                         md.flush()
                         try:
                             os.fsync(md.fileno())
