@@ -286,25 +286,24 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                         try:
                             fb = _sqlite.connect(DB_PATH, timeout=5)
                             fb.execute('PRAGMA journal_mode=WAL;')
-                            try:
-                                with fb:
-                                    cur = fb.cursor()
-                                    cur.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
-                                    row = cur.fetchone()
-                                    now_status = row[0] if row else None
-                                    if now_status not in ('completed','failed','timed_out'):
-                                        fb.execute('UPDATE runs SET status=?, updated_at=?, abandon_reason=? WHERE run_uuid=?', ('recovery-required', now_iso(), 'monitor-terminated', run_uuid))
-                                        fb.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, now_status or 'running', 'recovery-required', 'monitor', 'monitor-terminated', json.dumps({'signal': signum}), now_iso()))
+                            with fb:
+                                cur = fb.cursor()
+                                cur.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
+                                row = cur.fetchone()
+                                now_status = row[0] if row else None
+                                if now_status not in ('completed','failed','timed_out'):
+                                    fb.execute('UPDATE runs SET status=?, updated_at=?, abandon_reason=? WHERE run_uuid=?', ('recovery-required', now_iso(), 'monitor-terminated', run_uuid))
+                                    fb.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, now_status or 'running', 'recovery-required', 'monitor', 'monitor-terminated', json.dumps({'signal': signum}), now_iso()))
+                                    try:
+                                        os.makedirs(run_dir, exist_ok=True)
+                                        with open(os.path.join(run_dir, 'monitor.finalization.json'), 'w') as mf:
+                                            json.dump({'run_uuid': run_uuid, 'result': 'recovery-required', 'signal': signum, 'timestamp': now_iso()}, mf)
+                                    except Exception as e_inner:
                                         try:
-                                            os.makedirs(run_dir, exist_ok=True)
-                                            with open(os.path.join(run_dir, 'monitor.finalization.json'), 'w') as mf:
-                                                json.dump({'run_uuid': run_uuid, 'result': 'recovery-required', 'signal': signum, 'timestamp': now_iso()}, mf)
-                                        except Exception as e_inner:
-                                            try:
-                                                with open(os.path.join(run_dir, 'monitor.err'), 'a') as me:
-                                                    me.write('finalization write failed in signal handler: ' + str(e_inner) + '\n')
-                                            except Exception:
-                                                pass
+                                            with open(os.path.join(run_dir, 'monitor.err'), 'a') as me:
+                                                me.write('finalization write failed in signal handler: ' + str(e_inner) + '\n')
+                                        except Exception:
+                                            pass
                         except Exception as e_fb:
                             try:
                                 with open(os.path.join(run_dir, 'monitor.err'), 'a') as me:
@@ -681,16 +680,13 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                         import random
                         for attempt, backoff in enumerate(retry_backoffs, start=1):
                             # test-only fault injection: raise a transient sqlite error once when requested by environment
-                            try:
-                                inj = os.environ.get('SUPERVISOR_INJECT_FINALIZE_ERROR')
-                                inj_marker = os.path.join(run_dir, '.injected_finalization')
-                                if inj == '1' and not os.path.exists(inj_marker):
-                                    # create marker so injection happens only once per run
-                                    open(inj_marker, 'w').close()
-                                    raise _sqlite.OperationalError('injected finalization error')
-                            except Exception:
-                                # any exception here should be treated as injection-trigger or ignored
-                                pass
+                            inj = os.environ.get('SUPERVISOR_INJECT_FINALIZE_ERROR')
+                            inj_marker = os.path.join(run_dir, '.injected_finalization')
+                            if inj == '1' and not os.path.exists(inj_marker):
+                                # create marker so injection happens only once per run
+                                open(inj_marker, 'w').close()
+                                # deliberately raise a transient sqlite OperationalError to exercise retry logic
+                                raise _sqlite.OperationalError('injected finalization error')
 
                             started_at_attempt = now_iso()
                             try:
