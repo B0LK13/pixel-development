@@ -254,16 +254,81 @@ def resume_run(run_id):
     if not row:
         print(json.dumps({'error': 'not found'}))
         return 2
+    # columns index based on get_run select
+    run_uuid = row[1]
+    cmd = row[3]
+    workdir = row[4]
+    log_path = row[5]
+    pid = row[6]
     status = row[7]
+
     if status == 'running':
         print(json.dumps({'error': 'already running'}))
         return 2
-    cmd = row[3]
-    workdir = row[4]
-    parent = row[0]
-    new_id = start_run(cmd, workdir=workdir, parent_id=parent)
-    print(json.dumps({'resumed_from': run_id, 'new_run': new_id}))
-    return 0
+
+    # If child PID still alive, attach a monitor rather than restarting
+    alive = False
+    if pid:
+        try:
+            os.kill(pid, 0)
+            alive = True
+        except Exception:
+            alive = False
+    if alive:
+        # spawn monitor that watches existing pid and updates DB
+        pid_fork = os.fork()
+        if pid_fork == 0:
+            try:
+                mconn = sqlite3.connect(DB_PATH)
+                mconn.execute('PRAGMA journal_mode=WAL;')
+                hb_path = os.path.join(os.path.dirname(log_path), 'heartbeat.json')
+                start_ts = datetime.datetime.utcnow()
+                last_hb = None
+                while True:
+                    now = datetime.datetime.utcnow()
+                    elapsed = (now - start_ts).total_seconds()
+                    try:
+                        os.kill(pid, 0)
+                        still = True
+                    except Exception:
+                        still = False
+                    if last_hb is None or (now - last_hb).total_seconds() >= 15:
+                        try:
+                            st = os.stat(log_path)
+                            hb = {
+                                'timestamp': now.isoformat() + 'Z',
+                                'pid': pid,
+                                'elapsed_seconds': int(elapsed),
+                                'log_size': st.st_size,
+                                'log_mtime': datetime.datetime.utcfromtimestamp(st.st_mtime).isoformat() + 'Z',
+                                'status': 'running' if still else 'unknown'
+                            }
+                            with open(hb_path + '.tmp','w') as fh:
+                                fh.write(json.dumps(hb))
+                            os.replace(hb_path + '.tmp', hb_path)
+                        except Exception:
+                            pass
+                        last_hb = now
+                    if not still:
+                        finished_at = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + 'Z'
+                        # attempt to read exit code from log tail heuristics not available; mark interrupted->completed_unknown
+                        try:
+                            cur = mconn.cursor()
+                            cur.execute('UPDATE runs SET status=?, finished_at=?, updated_at=? WHERE run_uuid=?', ('recovered', finished_at, finished_at, run_uuid))
+                            mconn.commit()
+                        except Exception:
+                            pass
+                        os._exit(0)
+                    time.sleep(1)
+            finally:
+                os._exit(0)
+        print(json.dumps({'attached_to_pid': pid, 'run_uuid': run_uuid}))
+        return 0
+    else:
+        # safe to restart: create a new run record referencing parent
+        new_id = start_run(cmd, workdir=workdir, parent_id=run_id)
+        print(json.dumps({'resumed_from': run_id, 'new_run': new_id}))
+        return 0
 
 
 def init_db():
