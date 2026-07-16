@@ -10,7 +10,7 @@ OUT=$(python3 scripts/supervisor.py start --command "bash -lc 'echo smoke; sleep
 ID=$(python3 -c "import sys,json; print(json.loads(sys.stdin.read())['id'])" <<< "$OUT")
 echo "started run id=$ID"
 # wait for completion (poll)
-for i in $(seq 1 20); do
+for _ in $(seq 1 20); do
   sleep 0.2
   STATUS=$(python3 scripts/supervisor.py check "$ID" )
   echo "$STATUS" | grep -q 'interrupted' && break || true
