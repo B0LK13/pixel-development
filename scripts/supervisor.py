@@ -266,7 +266,28 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
             except Exception:
                 pass
 
-            # monitor loop: waitpid, enforce timeout, heartbeat and finalization
+            # install signal handlers so we can capture unexpected terminations
+            try:
+                import signal as _signal, traceback as _traceback
+                def _term_handler(signum, frame):
+                    try:
+                        with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                            me.write(f'Received signal: {signum}\n')
+                            try:
+                                me.write('\n'.join(_traceback.format_stack(frame)))
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    os._exit(128 + signum)
+                try:
+                    _signal.signal(_signal.SIGTERM, _term_handler)
+                    _signal.signal(_signal.SIGINT, _term_handler)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
             hb_path = os.path.join(run_dir, 'heartbeat.json')
             timed_out = False
             heartbeat_last = None
