@@ -254,6 +254,18 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
             except Exception:
                 pass
 
+            # write monitor pid for external diagnostics
+            try:
+                with open(os.path.join(run_dir, 'monitor.pid'), 'w') as mp:
+                    mp.write(str(os.getpid()))
+                    mp.flush()
+                    try:
+                        os.fsync(mp.fileno())
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
             # monitor loop: waitpid, enforce timeout, heartbeat and finalization
             hb_path = os.path.join(run_dir, 'heartbeat.json')
             timed_out = False
