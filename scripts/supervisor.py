@@ -680,19 +680,17 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                         import random
                         for attempt, backoff in enumerate(retry_backoffs, start=1):
                             # test-only fault injection: raise a transient sqlite error once when requested by environment
-                            inj = os.environ.get('SUPERVISOR_INJECT_FINALIZE_ERROR')
-                            inj_marker = os.path.join(run_dir, '.injected_finalization')
-                            if inj == '1' and not os.path.exists(inj_marker):
-                                # create marker so injection happens only once per run
-                                open(inj_marker, 'w').close()
-                                # deliberately raise a transient sqlite OperationalError to exercise retry logic
-                                raise _sqlite.OperationalError('injected finalization error')
-
                             started_at_attempt = now_iso()
                             try:
                                 with mconn:
                                     # re-check current row to maintain idempotency
                                     cur_check = mconn.cursor()
+                                    # test-only fault injection inside transactional attempt: raise a transient sqlite error once when requested
+                                    inj = os.environ.get('SUPERVISOR_INJECT_FINALIZE_ERROR')
+                                    inj_marker = os.path.join(run_dir, '.injected_finalization')
+                                    if inj == '1' and not os.path.exists(inj_marker):
+                                        open(inj_marker, 'w').close()
+                                        raise _sqlite.OperationalError('injected finalization error')
                                     cur_check.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
                                     row_now = cur_check.fetchone()
                                     now_status = row_now[0] if row_now else None
