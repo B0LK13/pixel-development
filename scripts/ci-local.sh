@@ -111,17 +111,113 @@ run_step(){ # name cmd...
   log_slug="$(printf '%s' "$name" | tr -c 'A-Za-z0-9_-' '_')"
   local log_file="$LOG_DIR/${log_slug}.log"
   local rc=0
-  if [ "$AS_JSON" = 1 ]; then
-    "$@" > "$log_file" 2>&1 &
-    CHILD_PID=$!
-    wait "$CHILD_PID" || rc=$?
-    CHILD_PID=''
+
+  # Build a single shell-escaped command string
+  local cmdstr=""
+  for a in "$@"; do
+    # shell-escape each arg
+    cmdstr+=" $(printf '%q' "$a")"
+  done
+  cmdstr="${cmdstr# }"
+
+  # If supervisor exists, use it for long-running commands
+  if [ -x "./scripts/supervise.sh" ]; then
+    local start_out
+    start_out=$(./scripts/supervise.sh start --command "$cmdstr") || true
+    # parse id and log_path
+    local run_id
+    run_id=$(python3 - <<PY
+import sys,json
+s='''$start_out'''
+if not s.strip():
+    sys.exit(2)
+try:
+    j=json.loads(s)
+    print(j.get('id',''))
+except Exception:
+    # try to read from stdout file if present
+    sys.exit(2)
+PY
+)
+    if [ -z "$run_id" ]; then
+      # fallback: run directly
+      if [ "$AS_JSON" = 1 ]; then
+        "$@" > "$log_file" 2>&1 &
+        CHILD_PID=$!
+        wait "$CHILD_PID" || rc=$?
+        CHILD_PID=''
+      else
+        "$@" 2>&1 | tee "$log_file" &
+        CHILD_PID=$!
+        wait "$CHILD_PID" || rc=$?
+        CHILD_PID=''
+      fi
+    else
+      # poll supervised run
+      while true; do
+        check_out=$(./scripts/supervise.sh check "$run_id") || true
+        # determine status
+        state=$(python3 - <<PY
+import sys,json
+s='''$check_out'''
+try:
+    j=json.loads(s)
+    print(j.get('status',''))
+except Exception:
+    sys.exit(0)
+PY
+)
+        if [ "$state" = "running" ]; then
+          sleep 1
+          continue
+        elif [ "$state" = "completed" ] || [ "$state" = "failed" ] || [ "$state" = "interrupted" ]; then
+          # read exit_code if available
+          rc=$(python3 - <<PY
+import sys,json
+s='''$check_out'''
+try:
+    j=json.loads(s)
+    print(j.get('exit_code') if 'exit_code' in j else 0)
+except Exception:
+    print(0)
+PY
+)
+          # copy supervisor log to ci-local log directory for visibility
+          log_path=$(python3 - <<PY
+import sys,json,os
+s='''$check_out'''
+try:
+    j=json.loads(s)
+    print(j.get('log_path',''))
+except Exception:
+    print('')
+PY
+)
+          if [ -n "$log_path" ] && [ -f "$log_path" ]; then
+            cp "$log_path" "$log_file" 2>/dev/null || true
+          fi
+          break
+        else
+          # unknown state
+          sleep 1
+        fi
+      done
+    fi
   else
-    "$@" 2>&1 | tee "$log_file" &
-    CHILD_PID=$!
-    wait "$CHILD_PID" || rc=$?
-    CHILD_PID=''
+    # supervisor not present: fallback
+    if [ "$AS_JSON" = 1 ]; then
+      "$@" > "$log_file" 2>&1 &
+      CHILD_PID=$!
+      wait "$CHILD_PID" || rc=$?
+      CHILD_PID=''
+    else
+      "$@" 2>&1 | tee "$log_file" &
+      CHILD_PID=$!
+      wait "$CHILD_PID" || rc=$?
+      CHILD_PID=''
+    fi
   fi
+
   if [ "$rc" -eq 0 ]; then
     record_step "$name" "ok" 0
     ok "$name"

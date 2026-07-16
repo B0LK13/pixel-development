@@ -12,6 +12,7 @@ import sys
 import uuid
 import datetime
 import json
+import time
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 EVIDENCE_DIR = os.path.join(REPO_ROOT, 'reports', 'run-supervision')
@@ -21,15 +22,20 @@ SCHEMA = '''
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_uuid TEXT UNIQUE,
+    schema_version INTEGER DEFAULT 1,
     parent_id INTEGER,
     cmd TEXT,
     workdir TEXT,
     log_path TEXT,
     pid INTEGER,
+    pgid INTEGER,
     status TEXT,
     started_at TEXT,
+    updated_at TEXT,
     finished_at TEXT,
     exit_code INTEGER,
+    signal INTEGER,
+    timeout_seconds INTEGER DEFAULT 0,
     commit_hash TEXT
 );
 '''
@@ -46,6 +52,29 @@ def connect_db():
     conn.execute('PRAGMA journal_mode=WAL;')
     conn.executescript(SCHEMA)
     conn.commit()
+    # migrate legacy table if needed
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info('runs')")
+        cols = [r[1] for r in cur.fetchall()]
+        needed = {
+            'pgid': 'ALTER TABLE runs ADD COLUMN pgid INTEGER',
+            'updated_at': "ALTER TABLE runs ADD COLUMN updated_at TEXT",
+            'signal': "ALTER TABLE runs ADD COLUMN signal INTEGER",
+            'timeout_seconds': "ALTER TABLE runs ADD COLUMN timeout_seconds INTEGER DEFAULT 0",
+            'commit_hash': "ALTER TABLE runs ADD COLUMN commit_hash TEXT",
+            'schema_version': "ALTER TABLE runs ADD COLUMN schema_version INTEGER DEFAULT 1",
+        }
+        for k,stmt in needed.items():
+            if k not in cols:
+                try:
+                    cur.execute(stmt)
+                    conn.commit()
+                except Exception:
+                    # best-effort migration
+                    pass
+    except Exception:
+        pass
     return conn
 
 
@@ -75,13 +104,93 @@ def start_run(cmd, workdir=None, parent_id=None):
         # Use bash -lc to support shell constructs
         proc = subprocess.Popen(['bash', '-lc', cmd], cwd=(workdir or REPO_ROOT), stdout=lf, stderr=subprocess.STDOUT, preexec_fn=os.setsid)
         pid = proc.pid
+        try:
+            pgid = os.getpgid(pid)
+        except Exception:
+            pgid = None
 
     cur = conn.cursor()
-    cur.execute('''INSERT INTO runs (run_uuid, parent_id, cmd, workdir, log_path, pid, status, started_at, commit_hash) VALUES (?,?,?,?,?,?,?,?,?)''',
-                (run_uuid, parent_id, cmd, workdir or REPO_ROOT, log_path, pid, 'running', started_at, commit))
+    cur.execute('''INSERT INTO runs (run_uuid, parent_id, cmd, workdir, log_path, pid, pgid, status, started_at, updated_at, commit_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                (run_uuid, parent_id, cmd, workdir or REPO_ROOT, log_path, pid, pgid, 'running', started_at, started_at, commit))
     conn.commit()
     run_id = cur.lastrowid
-    print(json.dumps({'id': run_id, 'run_uuid': run_uuid, 'pid': pid, 'log_path': log_path}))
+
+    # Spawn a detached monitor process to wait for the child and update DB and heartbeat
+    pid_fork = os.fork()
+    if pid_fork == 0:
+        # child monitor
+        try:
+            # New DB connection in monitor
+            mconn = sqlite3.connect(DB_PATH)
+            mconn.execute('PRAGMA journal_mode=WAL;')
+            run_dir_local = os.path.dirname(log_path)
+            hb_path = os.path.join(run_dir_local, 'heartbeat.json')
+            start_ts = datetime.datetime.utcnow()
+            last_hb = None
+            # Poll loop: check every second, write heartbeat every 15s
+            while True:
+                ret = proc.poll()
+                now = datetime.datetime.utcnow()
+                elapsed = (now - start_ts).total_seconds()
+                # heartbeat write every 15s
+                if last_hb is None or (now - last_hb).total_seconds() >= 15:
+                    try:
+                        st = os.stat(log_path)
+                        hb = {
+                            'timestamp': now.isoformat() + 'Z',
+                            'pid': pid,
+                            'pgid': pgid,
+                            'elapsed_seconds': int(elapsed),
+                            'log_size': st.st_size,
+                            'log_mtime': datetime.datetime.utcfromtimestamp(st.st_mtime).isoformat() + 'Z',
+                            'status': 'running' if ret is None else 'exited'
+                        }
+                        with open(hb_path + '.tmp', 'w') as fh:
+                            fh.write(json.dumps(hb))
+                        os.replace(hb_path + '.tmp', hb_path)
+                    except Exception:
+                        pass
+                    last_hb = now
+                if ret is not None:
+                    # process ended
+                    exit_code = ret
+                    finished_at = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + 'Z'
+                    status = 'completed' if exit_code == 0 else 'failed'
+                    try:
+                        curm = mconn.cursor()
+                        curm.execute('UPDATE runs SET status=?, finished_at=?, updated_at=?, exit_code=? WHERE run_uuid=?', (status, finished_at, finished_at, exit_code, run_uuid))
+                        mconn.commit()
+                    except Exception:
+                        pass
+                    # final heartbeat
+                    try:
+                        st = os.stat(log_path)
+                        hb = {
+                            'timestamp': finished_at,
+                            'pid': pid,
+                            'pgid': pgid,
+                            'elapsed_seconds': int(elapsed),
+                            'log_size': st.st_size,
+                            'log_mtime': datetime.datetime.utcfromtimestamp(st.st_mtime).isoformat() + 'Z',
+                            'status': status,
+                            'exit_code': exit_code
+                        }
+                        with open(hb_path + '.tmp', 'w') as fh:
+                            fh.write(json.dumps(hb))
+                        os.replace(hb_path + '.tmp', hb_path)
+                    except Exception:
+                        pass
+                    os._exit(0)
+                # sleep small
+                try:
+                    time.sleep(1)
+                except Exception:
+                    pass
+        finally:
+            os._exit(0)
+
+    # parent returns
+    print(json.dumps({'id': run_id, 'run_uuid': run_uuid, 'pid': pid, 'pgid': pgid, 'log_path': log_path}))
     return run_id
 
 
@@ -107,32 +216,36 @@ def check_run(run_id):
     if not row:
         print(json.dumps({'error': 'not found'}))
         return 2
-    pid = row[5]
-    status = row[7]
+    # columns: id(0),run_uuid(1),parent_id(2),cmd(3),workdir(4),log_path(5),pid(6),status(7),started_at(8),finished_at(9),exit_code(10),commit_hash(11)
     log_path = row[5]
+    pid = row[6]
+    status = row[7]
     try:
-        os.kill(pid, 0)
-        alive = True
+        if pid is not None:
+            os.kill(pid, 0)
+            alive = True
+        else:
+            alive = False
     except Exception:
         alive = False
     conn = connect_db()
     cur = conn.cursor()
     if alive:
         # still running
-        cur.execute('UPDATE runs SET status=? WHERE id=?', ('running', run_id))
+        cur.execute('UPDATE runs SET status=?, updated_at=? WHERE id=?', ('running', now_iso(), run_id))
         conn.commit()
-        print(json.dumps({'id': run_id, 'pid': pid, 'status': 'running', 'log_path': row[5]}))
+        print(json.dumps({'id': run_id, 'pid': pid, 'status': 'running', 'log_path': log_path}))
         return 0
     else:
         # process not alive -- try to collect exit_code by checking if finished_at recorded
         if row[9]:
-            print(json.dumps({'id': run_id, 'status': row[7], 'finished_at': row[9], 'exit_code': row[10], 'log_path': row[5]}))
+            print(json.dumps({'id': run_id, 'status': row[7], 'finished_at': row[9], 'exit_code': row[10], 'log_path': log_path}))
             return 0
         else:
             # mark interrupted
-            cur.execute('UPDATE runs SET status=?, finished_at=? WHERE id=?', ('interrupted', now_iso(), run_id))
+            cur.execute('UPDATE runs SET status=?, finished_at=?, updated_at=? WHERE id=?', ('interrupted', now_iso(), now_iso(), run_id))
             conn.commit()
-            print(json.dumps({'id': run_id, 'status': 'interrupted', 'log_path': row[5]}))
+            print(json.dumps({'id': run_id, 'status': 'interrupted', 'log_path': log_path}))
             return 0
 
 
