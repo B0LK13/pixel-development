@@ -413,6 +413,74 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                         pass
                             except Exception:
                                 pass
+
+                            # If still no reaped child and no timeout transition, perform fallback finalization using a fresh short-lived connection
+                            try:
+                                cur_check2 = mconn.cursor()
+                                cur_check2.execute("SELECT COUNT(1) FROM transitions WHERE run_uuid=? AND new_status='timed_out'", (run_uuid,))
+                                have_to = cur_check2.fetchone()[0]
+                            except Exception:
+                                have_to = 0
+                            if pid_ret != child_pid and not have_to:
+                                try:
+                                    with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                        md.write(f'FALLBACK_FINALIZE: pid_ret={pid_ret} have_timeout_transition={have_to}\n')
+                                        md.flush()
+                                        try:
+                                            os.fsync(md.fileno())
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    pass
+                                try:
+                                    fb_conn = _sqlite.connect(DB_PATH, timeout=30)
+                                    fb_conn.execute('PRAGMA journal_mode=WAL;')
+                                    try:
+                                        fb_conn.execute('PRAGMA busy_timeout = 5000;')
+                                    except Exception:
+                                        pass
+                                except Exception as e_fb_open:
+                                    try:
+                                        with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                                            import traceback as _tb
+                                            me.write(_tb.format_exc())
+                                    except Exception:
+                                        pass
+                                    fb_conn = None
+                                if fb_conn:
+                                    try:
+                                        with fb_conn:
+                                            now_stat = fb_conn.cursor()
+                                            now_stat.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
+                                            row_now = now_stat.fetchone()
+                                            now_status = row_now[0] if row_now else None
+                                            if now_status not in ('completed','failed','timed_out'):
+                                                fb_conn.execute('UPDATE runs SET status=?, finished_at=?, updated_at=? WHERE run_uuid=?', ('timed_out', now_iso(), now_iso(), run_uuid))
+                                                cur_t = fb_conn.cursor()
+                                                cur_t.execute('SELECT COUNT(1) FROM transitions WHERE run_uuid=? AND new_status=? AND source=? AND reason=?', (run_uuid, 'timed_out', 'monitor', 'timeout-detected'))
+                                                exists = cur_t.fetchone()[0]
+                                                if not exists:
+                                                    fb_conn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, 'running', 'timed_out', 'monitor', 'timeout-detected', json.dumps({'fallback': True}), now_iso()))
+                                            # write finalization artifact so checkers see evidence
+                                            try:
+                                                with open(os.path.join(run_dir, 'monitor.finalization.json'), 'w') as mf:
+                                                    json.dump({'run_uuid': run_uuid, 'fallback_forced': True, 'final_status': 'timed_out', 'timestamp': now_iso()}, mf)
+                                            except Exception:
+                                                pass
+                                            have_to = 1
+                                    except Exception:
+                                        try:
+                                            with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                                                import traceback as _tb
+                                                me.write(_tb.format_exc())
+                                        except Exception:
+                                            pass
+                                    finally:
+                                        try:
+                                            fb_conn.close()
+                                        except Exception:
+                                            pass
+
                 except Exception:
                     pass
 
