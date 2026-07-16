@@ -312,6 +312,18 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                     tsec = int(timeout_seconds or 0)
                     grace = int(grace_period or 5)
 
+                # diagnostic: log timeout check values
+                try:
+                    with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                        md.write(f'TIMEOUT_CHECK elapsed={elapsed:.3f} tsec={tsec} timed_out={timed_out} loop={loop_count}\n')
+                        md.flush()
+                        try:
+                            os.fsync(md.fileno())
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
                 if pid_ret == child_pid:
                     # debug write: reaped child
                     try:
