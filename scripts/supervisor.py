@@ -289,6 +289,26 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                     except Exception:
                         pass
                 # diagnostic: log first waitpid result or any non-zero result
+                # If waitpid returned 0 but /proc/<child_pid> does not exist, assume the child exited and was reparented/reaped elsewhere; proceed to finalization to avoid leaving a nonterminal row.
+                try:
+                    if pid_ret == 0:
+                        proc_exists = os.path.exists(f"/proc/{child_pid}")
+                        if not proc_exists:
+                            try:
+                                with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                    md.write(f'PROC_MISSING assume_reaped child_pid={child_pid} proc_exists={proc_exists}\n')
+                                    md.flush()
+                                    try:
+                                        os.fsync(md.fileno())
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                            # synthesize a reaped child so finalization runs (status unknown)
+                            pid_ret = child_pid
+                            status = 0
+                except Exception:
+                    pass
                 try:
                     if loop_count == 1 or pid_ret != 0:
                         with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
