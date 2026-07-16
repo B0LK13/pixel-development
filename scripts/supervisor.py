@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS runs (
     workdir TEXT,
     log_path TEXT,
     pid INTEGER,
+    pid_start_time TEXT,
     pgid INTEGER,
     status TEXT,
     started_at TEXT,
@@ -36,7 +37,27 @@ CREATE TABLE IF NOT EXISTS runs (
     exit_code INTEGER,
     signal INTEGER,
     timeout_seconds INTEGER DEFAULT 0,
+    timeout_detected_at TEXT,
+    grace_period_seconds INTEGER DEFAULT 5,
+    escalated_to_sigkill INTEGER DEFAULT 0,
+    abandoned_at TEXT,
+    abandon_reason TEXT,
+    last_known_pid INTEGER,
+    last_known_pgid INTEGER,
+    last_heartbeat TEXT,
+    status_confidence INTEGER DEFAULT 100,
     commit_hash TEXT
+);
+
+CREATE TABLE IF NOT EXISTS transitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_uuid TEXT,
+    previous_status TEXT,
+    new_status TEXT,
+    source TEXT,
+    reason TEXT,
+    evidence TEXT,
+    transitioned_at TEXT
 );
 '''
 
@@ -48,7 +69,7 @@ def ensure_dirs():
 
 def connect_db():
     ensure_dirs()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute('PRAGMA journal_mode=WAL;')
     conn.executescript(SCHEMA)
     conn.commit()
@@ -58,10 +79,20 @@ def connect_db():
         cur.execute("PRAGMA table_info('runs')")
         cols = [r[1] for r in cur.fetchall()]
         needed = {
+            'pid_start_time': "ALTER TABLE runs ADD COLUMN pid_start_time TEXT",
             'pgid': 'ALTER TABLE runs ADD COLUMN pgid INTEGER',
             'updated_at': "ALTER TABLE runs ADD COLUMN updated_at TEXT",
             'signal': "ALTER TABLE runs ADD COLUMN signal INTEGER",
             'timeout_seconds': "ALTER TABLE runs ADD COLUMN timeout_seconds INTEGER DEFAULT 0",
+            'timeout_detected_at': "ALTER TABLE runs ADD COLUMN timeout_detected_at TEXT",
+            'grace_period_seconds': "ALTER TABLE runs ADD COLUMN grace_period_seconds INTEGER DEFAULT 5",
+            'escalated_to_sigkill': "ALTER TABLE runs ADD COLUMN escalated_to_sigkill INTEGER DEFAULT 0",
+            'abandoned_at': "ALTER TABLE runs ADD COLUMN abandoned_at TEXT",
+            'abandon_reason': "ALTER TABLE runs ADD COLUMN abandon_reason TEXT",
+            'last_known_pid': "ALTER TABLE runs ADD COLUMN last_known_pid INTEGER",
+            'last_known_pgid': "ALTER TABLE runs ADD COLUMN last_known_pgid INTEGER",
+            'last_heartbeat': "ALTER TABLE runs ADD COLUMN last_heartbeat TEXT",
+            'status_confidence': "ALTER TABLE runs ADD COLUMN status_confidence INTEGER DEFAULT 100",
             'commit_hash': "ALTER TABLE runs ADD COLUMN commit_hash TEXT",
             'schema_version': "ALTER TABLE runs ADD COLUMN schema_version INTEGER DEFAULT 1",
         }
@@ -79,7 +110,13 @@ def connect_db():
 
 
 def now_iso():
+    # timezone-aware UTC timestamp for persisted records
     return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + 'Z'
+
+# Configurable heartbeat and freshness thresholds (seconds)
+HEARTBEAT_FRESHNESS_SECONDS = 10
+HEARTBEAT_STALE_ABANDON_SECONDS = 600
+CHECKRUN_GRACE_SECONDS = 3
 
 
 def git_commit():
@@ -90,114 +127,423 @@ def git_commit():
         return None
 
 
-def start_run(cmd, workdir=None, parent_id=None):
-    conn = connect_db()
+def _proc_start_time(pid):
+    # Robustly parse /proc/<pid>/stat to extract starttime (field 22, 1-based). If parsing fails, fall back to cmdline.
+    try:
+        with open(f"/proc/{pid}/stat", 'r') as fh:
+            s = fh.read()
+            # comm field may contain spaces inside parentheses; find last ')' then split the remainder
+            idx = s.rfind(')')
+            if idx != -1:
+                post = s[idx+2:]
+                fields = post.split()
+                # starttime is the 22nd field overall; in 'post' it is at index 20 (0-based)
+                if len(fields) >= 21:
+                    return fields[20]
+    except Exception:
+        pass
+    try:
+        with open(f"/proc/{pid}/cmdline", 'rb') as fh:
+            return fh.read().decode(errors='ignore')
+    except Exception:
+        return None
+
+
+def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period=5):
     run_uuid = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]
     run_dir = os.path.join(EVIDENCE_DIR, run_uuid)
     os.makedirs(run_dir, exist_ok=True)
     log_path = os.path.join(run_dir, 'stdout.log')
-    started_at = now_iso()
     commit = git_commit()
 
-    # Launch subprocess in new session
-    with open(log_path, 'ab') as lf:
-        # Use bash -lc to support shell constructs
-        proc = subprocess.Popen(['bash', '-lc', cmd], cwd=(workdir or REPO_ROOT), stdout=lf, stderr=subprocess.STDOUT, preexec_fn=os.setsid)
-        pid = proc.pid
-        try:
-            pgid = os.getpgid(pid)
-        except Exception:
-            pgid = None
+    # Monitor-first launch: fork monitor, monitor forks supervised child, monitor persists identity and finalizes
+    # create a short pipe for monitor startup acknowledgement
+    rfd, wfd = os.pipe()
 
-    cur = conn.cursor()
-    cur.execute('''INSERT INTO runs (run_uuid, parent_id, cmd, workdir, log_path, pid, pgid, status, started_at, updated_at, commit_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-                (run_uuid, parent_id, cmd, workdir or REPO_ROOT, log_path, pid, pgid, 'running', started_at, started_at, commit))
-    conn.commit()
-    run_id = cur.lastrowid
-
-    # Spawn a detached monitor process to wait for the child and update DB and heartbeat
     pid_fork = os.fork()
-    if pid_fork == 0:
-        # child monitor
+    if pid_fork > 0:
+        # parent: wait for ack from monitor
+        os.close(wfd)
+        ack = None
         try:
-            # New DB connection in monitor
-            mconn = sqlite3.connect(DB_PATH)
-            mconn.execute('PRAGMA journal_mode=WAL;')
-            run_dir_local = os.path.dirname(log_path)
-            hb_path = os.path.join(run_dir_local, 'heartbeat.json')
-            start_ts = datetime.datetime.utcnow()
-            last_hb = None
-            # Poll loop: check every second, write heartbeat every 15s
-            while True:
-                ret = proc.poll()
-                now = datetime.datetime.utcnow()
-                elapsed = (now - start_ts).total_seconds()
-                # heartbeat write every 15s
-                if last_hb is None or (now - last_hb).total_seconds() >= 15:
+            import select as _select
+            rlist,_,_ = _select.select([rfd], [], [], 5)
+            if rfd in rlist:
+                data = os.read(rfd, 4096)
+                if data:
                     try:
-                        st = os.stat(log_path)
-                        hb = {
-                            'timestamp': now.isoformat() + 'Z',
-                            'pid': pid,
-                            'pgid': pgid,
-                            'elapsed_seconds': int(elapsed),
-                            'log_size': st.st_size,
-                            'log_mtime': datetime.datetime.utcfromtimestamp(st.st_mtime).isoformat() + 'Z',
-                            'status': 'running' if ret is None else 'exited'
-                        }
-                        with open(hb_path + '.tmp', 'w') as fh:
-                            fh.write(json.dumps(hb))
-                        os.replace(hb_path + '.tmp', hb_path)
+                        ack = json.loads(data.decode())
+                    except Exception:
+                        ack = None
+        finally:
+            try:
+                os.close(rfd)
+            except Exception:
+                pass
+        if not ack:
+            print(json.dumps({'error': 'monitor-startup-timeout'}))
+            return 2
+        print(json.dumps({'id': ack.get('id'), 'run_uuid': ack.get('run_uuid'), 'pid': ack.get('child_pid'), 'pgid': ack.get('pgid'), 'log_path': os.path.join(EVIDENCE_DIR, ack.get('run_uuid'), 'stdout.log')}))
+        return ack.get('id')
+
+    # monitor child
+    try:
+        try:
+            os.close(rfd)
+        except Exception:
+            pass
+        mconn = connect_db()
+        mconn.execute('PRAGMA journal_mode=WAL;')
+        # fork supervised child
+        child_pid = os.fork()
+        if child_pid == 0:
+            # supervised child
+            try:
+                os.setsid()
+                if workdir:
+                    try:
+                        os.chdir(workdir)
                     except Exception:
                         pass
-                    last_hb = now
-                if ret is not None:
-                    # process ended
-                    exit_code = ret
-                    finished_at = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + 'Z'
-                    status = 'completed' if exit_code == 0 else 'failed'
-                    try:
-                        curm = mconn.cursor()
-                        curm.execute('UPDATE runs SET status=?, finished_at=?, updated_at=?, exit_code=? WHERE run_uuid=?', (status, finished_at, finished_at, exit_code, run_uuid))
-                        mconn.commit()
-                    except Exception:
-                        pass
-                    # final heartbeat
-                    try:
-                        st = os.stat(log_path)
-                        hb = {
-                            'timestamp': finished_at,
-                            'pid': pid,
-                            'pgid': pgid,
-                            'elapsed_seconds': int(elapsed),
-                            'log_size': st.st_size,
-                            'log_mtime': datetime.datetime.utcfromtimestamp(st.st_mtime).isoformat() + 'Z',
-                            'status': status,
-                            'exit_code': exit_code
-                        }
-                        with open(hb_path + '.tmp', 'w') as fh:
-                            fh.write(json.dumps(hb))
-                        os.replace(hb_path + '.tmp', hb_path)
-                    except Exception:
-                        pass
-                    os._exit(0)
-                # sleep small
+                # redirect stdout/stderr
+                lf = os.open(log_path, os.O_CREAT | os.O_WRONLY | os.O_APPEND, 0o644)
+                os.dup2(lf, 1)
+                os.dup2(lf, 2)
                 try:
-                    time.sleep(1)
+                    os.close(wfd)
                 except Exception:
                     pass
-        finally:
-            os._exit(0)
+                env = os.environ.copy()
+                os.execvpe('/bin/bash', ['bash', '-lc', cmd], env)
+            except Exception:
+                try:
+                    sys.stderr.write('exec failed\n')
+                    sys.stderr.flush()
+                except Exception:
+                    pass
+                os._exit(127)
+        else:
+            # monitor: persist child identity and run row
+            child_pgid = None
+            try:
+                child_pgid = os.getpgid(child_pid)
+            except Exception:
+                child_pgid = None
+            time.sleep(0.02)
+            child_start = _proc_start_time(child_pid)
+            started_at = now_iso()
+            cur = mconn.cursor()
+            try:
+                with mconn:
+                    cur.execute('''INSERT INTO runs (run_uuid, parent_id, cmd, workdir, log_path, pid, pid_start_time, pgid, status, started_at, updated_at, commit_hash, timeout_seconds, grace_period_seconds) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                                (run_uuid, parent_id, cmd, workdir or REPO_ROOT, log_path, child_pid, child_start, child_pgid, 'running', started_at, started_at, commit, int(timeout_seconds), int(grace_period)))
+                    run_id = cur.lastrowid
+            except Exception:
+                mconn.rollback()
+                cur.execute('SELECT id FROM runs WHERE run_uuid=?', (run_uuid,))
+                row = cur.fetchone()
+                run_id = row[0] if row else None
+            # send ack
+            ack = {'id': run_id, 'run_uuid': run_uuid, 'child_pid': child_pid, 'pgid': child_pgid}
+            try:
+                os.write(wfd, json.dumps(ack).encode())
+            except Exception:
+                pass
+            try:
+                os.close(wfd)
+            except Exception:
+                pass
 
-    # parent returns
-    print(json.dumps({'id': run_id, 'run_uuid': run_uuid, 'pid': pid, 'pgid': pgid, 'log_path': log_path}))
-    return run_id
+            # monitor loop: waitpid, enforce timeout, heartbeat and finalization
+            hb_path = os.path.join(run_dir, 'heartbeat.json')
+            timed_out = False
+            heartbeat_last = None
+            start_mon = time.monotonic()
+            while True:
+                try:
+                    pid_ret, status = os.waitpid(child_pid, os.WNOHANG)
+                except ChildProcessError:
+                    pid_ret = 0
+                    status = 0
+                now_mon = time.monotonic()
+                elapsed = now_mon - start_mon
+                try:
+                    cur = mconn.cursor()
+                    cur.execute('SELECT timeout_seconds, grace_period_seconds FROM runs WHERE run_uuid=?', (run_uuid,))
+                    r = cur.fetchone()
+                    tsec = int(r[0] or 0) if r else 0
+                    grace = int(r[1] or 5) if r else 5
+                except Exception:
+                    tsec = int(timeout_seconds or 0)
+                    grace = int(grace_period or 5)
+
+                if pid_ret == child_pid:
+                    # debug write: reaped child
+                    try:
+                        with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                            md.write(f'reaped child {child_pid} status={status}\n')
+                    except Exception:
+                        pass
+                    exit_code = None
+                    sig = None
+                    final_status = 'failed'
+                    if os.WIFEXITED(status):
+                        exit_code = os.WEXITSTATUS(status)
+                        final_status = 'completed' if exit_code == 0 else 'failed'
+                    elif os.WIFSIGNALED(status):
+                        sig = os.WTERMSIG(status)
+                        final_status = 'failed'
+                    finished_at = now_iso()
+                    try:
+                        st = os.stat(log_path)
+                        hb = {'timestamp': finished_at, 'pid': child_pid, 'pgid': child_pgid, 'elapsed_seconds': int(elapsed), 'log_size': st.st_size, 'log_mtime': datetime.datetime.utcfromtimestamp(st.st_mtime).isoformat() + 'Z', 'status': final_status, 'exit_code': exit_code}
+                        with open(hb_path + '.tmp', 'w') as fh:
+                            fh.write(json.dumps(hb))
+                        try:
+                            os.replace(hb_path + '.tmp', hb_path)
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+                    # Attempt transactional finalization with bounded retries and a fallback short-lived connection.
+                    import sqlite3 as _sqlite
+                    retry_backoffs = [0.1, 0.2, 0.4, 0.6, 0.8]
+                    success = False
+                    attempt_info = []
+                    try:
+                        # read previous status
+                        try:
+                            tx = mconn.cursor()
+                            tx.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
+                            res = tx.fetchone()
+                            prev = res[0] if res else None
+                        except Exception:
+                            prev = None
+
+                        for attempt, backoff in enumerate(retry_backoffs, start=1):
+                            started_at_attempt = now_iso()
+                            try:
+                                with mconn:
+                                    # re-check current row to maintain idempotency
+                                    cur_check = mconn.cursor()
+                                    cur_check.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
+                                    row_now = cur_check.fetchone()
+                                    now_status = row_now[0] if row_now else None
+                                    # If already terminal, respect it and don't overwrite
+                                    if now_status in ('completed', 'failed', 'timed_out'):
+                                        attempt_info.append({'attempt': attempt, 'connection': 'main', 'started_at': started_at_attempt, 'result': 'already_terminal', 'row_status': now_status})
+                                        success = True
+                                        break
+
+                                    # perform update and insert transition idempotently
+                                    mconn.execute('UPDATE runs SET status=?, finished_at=?, updated_at=?, exit_code=?, signal=? WHERE run_uuid=?', (final_status, finished_at, finished_at, exit_code, sig, run_uuid))
+                                    # avoid duplicate transitions: check existing transition
+                                    cur_t = mconn.cursor()
+                                    cur_t.execute('SELECT COUNT(1) FROM transitions WHERE run_uuid=? AND new_status=? AND source=? AND reason=?', (run_uuid, final_status, 'monitor', 'process-exit'))
+                                    exists = cur_t.fetchone()[0]
+                                    if not exists:
+                                        mconn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, prev, final_status, 'monitor', 'process-exit', json.dumps({'exit_code': exit_code, 'signal': sig}), finished_at))
+                                    try:
+                                        with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                            md.write(f'finalized run in DB on attempt {attempt}\n')
+                                    except Exception:
+                                        pass
+                                    attempt_info.append({'attempt': attempt, 'connection': 'main', 'started_at': started_at_attempt, 'result': 'committed'})
+                                    success = True
+                                    break
+                            except Exception as e:
+                                err_text = str(e)
+                                is_retryable = False
+                                try:
+                                    if isinstance(e, _sqlite.OperationalError):
+                                        el = err_text.lower()
+                                        if 'locked' in el or 'busy' in el or 'database is locked' in el or 'table is locked' in el or 'schema' in el:
+                                            is_retryable = True
+                                except Exception:
+                                    is_retryable = False
+                                attempt_info.append({'attempt': attempt, 'connection': 'main', 'started_at': started_at_attempt, 'exception': err_text, 'retryable': is_retryable})
+                                try:
+                                    with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                        md.write(f'finalization attempt {attempt} failed: {err_text}\n')
+                                except Exception:
+                                    pass
+                                if not is_retryable:
+                                    break
+                                # backoff
+                                time.sleep(backoff)
+
+                        if not success:
+                            # fallback: open a fresh short-lived connection and attempt once
+                            fb_started = now_iso()
+                            try:
+                                if os.path.exists(mconn.database):
+                                    pass
+                            except Exception:
+                                pass
+                            try:
+                                fb_conn = _sqlite.connect(DB_PATH, timeout=30)
+                                fb_conn.execute('PRAGMA journal_mode=WAL;')
+                                try:
+                                    with fb_conn:
+                                        cur_check = fb_conn.cursor()
+                                        cur_check.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
+                                        row_now = cur_check.fetchone()
+                                        now_status = row_now[0] if row_now else None
+                                        if now_status in ('completed', 'failed', 'timed_out'):
+                                            attempt_info.append({'attempt': 'fallback', 'connection': 'fallback', 'started_at': fb_started, 'result': 'already_terminal', 'row_status': now_status})
+                                            success = True
+                                        else:
+                                            fb_conn.execute('UPDATE runs SET status=?, finished_at=?, updated_at=?, exit_code=?, signal=? WHERE run_uuid=?', (final_status, finished_at, finished_at, exit_code, sig, run_uuid))
+                                            cur_t = fb_conn.cursor()
+                                            cur_t.execute('SELECT COUNT(1) FROM transitions WHERE run_uuid=? AND new_status=? AND source=? AND reason=?', (run_uuid, final_status, 'monitor', 'process-exit'))
+                                            exists = cur_t.fetchone()[0]
+                                            if not exists:
+                                                fb_conn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, prev, final_status, 'monitor', 'process-exit', json.dumps({'exit_code': exit_code, 'signal': sig, 'fallback': True}), finished_at))
+                                            attempt_info.append({'attempt': 'fallback', 'connection': 'fallback', 'started_at': fb_started, 'result': 'committed'})
+                                            success = True
+                                finally:
+                                    try:
+                                        fb_conn.close()
+                                    except Exception:
+                                        pass
+                            except Exception as e_fb:
+                                attempt_info.append({'attempt': 'fallback', 'connection': 'fallback', 'started_at': fb_started, 'exception': str(e_fb), 'retryable': False})
+                                try:
+                                    with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                                        import traceback as _tb
+                                        me.write(_tb.format_exc())
+                                except Exception:
+                                    pass
+                                try:
+                                    with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                        md.write('fallback finalization failed; see monitor.err\n')
+                                except Exception:
+                                    pass
+
+                        # write attempt_info summary
+                        try:
+                            with open(os.path.join(run_dir, 'monitor.finalization.json'), 'w') as mf:
+                                json.dump({'run_uuid': run_uuid, 'attempts': attempt_info, 'success': success}, mf)
+                        except Exception:
+                            pass
+
+                        if not success:
+                            # mark run as needing recovery; do not claim terminal persisted
+                            try:
+                                with mconn:
+                                    mconn.execute('UPDATE runs SET status=?, updated_at=?, abandon_reason=? WHERE run_uuid=?', ('recovery-required', now_iso(), 'finalization-failed', run_uuid))
+                                    mconn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, prev, 'recovery-required', 'monitor', 'finalization-failed', json.dumps({'attempts': attempt_info}), now_iso()))
+                            except Exception:
+                                try:
+                                    with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                                        import traceback as _tb
+                                        me.write(_tb.format_exc())
+                                except Exception:
+                                    pass
+                            # exit nonzero to signal supervisor failure; leave evidence
+                            try:
+                                os._exit(1)
+                            except Exception:
+                                pass
+                    except Exception:
+                        try:
+                            import traceback as _tb
+                            with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                                me.write(_tb.format_exc())
+                        except Exception:
+                            pass
+                        try:
+                            with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                md.write('unexpected exception during finalization; see monitor.err\n')
+                        except Exception:
+                            pass
+                    break
+
+                if tsec and not timed_out and elapsed > tsec:
+                    timed_out = True
+                    timeout_detected_at = now_iso()
+                    try:
+                        if child_pgid:
+                            os.killpg(child_pgid, 15)
+                        else:
+                            os.kill(child_pid, 15)
+                    except Exception:
+                        pass
+                    try:
+                        with mconn:
+                            mconn.execute('UPDATE runs SET status=?, timeout_detected_at=?, updated_at=? WHERE run_uuid=?', ('timed_out', timeout_detected_at, timeout_detected_at, run_uuid))
+                            mconn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, 'running', 'timed_out', 'monitor', 'timeout-detected', json.dumps({'timeout_seconds': tsec}), timeout_detected_at))
+                    except Exception:
+                        pass
+                    waited = 0
+                    while waited < grace:
+                        try:
+                            pid_ret2, status2 = os.waitpid(child_pid, os.WNOHANG)
+                            if pid_ret2 == child_pid:
+                                pid_ret = pid_ret2
+                                status = status2
+                                break
+                        except ChildProcessError:
+                            break
+                        time.sleep(1)
+                        waited += 1
+                    try:
+                        pid_ret3, _ = os.waitpid(child_pid, os.WNOHANG)
+                        if pid_ret3 == 0:
+                            try:
+                                if child_pgid:
+                                    os.killpg(child_pgid, 9)
+                                else:
+                                    os.kill(child_pid, 9)
+                                escal = 1
+                            except Exception:
+                                escal = 0
+                            try:
+                                with mconn:
+                                    mconn.execute('UPDATE runs SET escalated_to_sigkill=?, updated_at=? WHERE run_uuid=?', (escal, now_iso(), run_uuid))
+                                    mconn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, 'timed_out', 'timed_out', 'monitor', 'escalated-to-sigkill', json.dumps({'escalated': escal}), now_iso()))
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                try:
+                    now_iso_ts = now_iso()
+                    if heartbeat_last is None or (time.time() - (heartbeat_last or 0)) >= 15:
+                        try:
+                            st = os.stat(log_path)
+                            hb = {'timestamp': now_iso_ts, 'pid': child_pid, 'pgid': child_pgid, 'elapsed_seconds': int(elapsed), 'log_size': st.st_size, 'log_mtime': datetime.datetime.utcfromtimestamp(st.st_mtime).isoformat() + 'Z', 'status': 'running'}
+                            with open(hb_path + '.tmp', 'w') as fh:
+                                fh.write(json.dumps(hb))
+                            try:
+                                os.replace(hb_path + '.tmp', hb_path)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                        heartbeat_last = time.time()
+                except Exception:
+                    pass
+
+                time.sleep(0.2)
+    except Exception as e:
+        try:
+            import traceback
+            with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                me.write(traceback.format_exc())
+        except Exception:
+            pass
+    finally:
+        try:
+            os._exit(0)
+        except Exception:
+            pass
 
 
 def get_run(run_id):
     conn = connect_db()
     cur = conn.cursor()
-    cur.execute('SELECT id,run_uuid,parent_id,cmd,workdir,log_path,pid,status,started_at,finished_at,exit_code,commit_hash FROM runs WHERE id=?', (run_id,))
+    cur.execute('''SELECT id,run_uuid,parent_id,cmd,workdir,log_path,pid,pid_start_time,pgid,status,started_at,finished_at,exit_code,signal,timeout_seconds,timeout_detected_at,grace_period_seconds,escalated_to_sigkill,abandoned_at,abandon_reason,last_known_pid,last_known_pgid,last_heartbeat,status_confidence,commit_hash FROM runs WHERE id=?''', (run_id,))
     row = cur.fetchone()
     return row
 
@@ -212,41 +558,100 @@ def list_runs():
 
 
 def check_run(run_id):
+    # Conservative check that avoids racing the monitor finalization
     row = get_run(run_id)
     if not row:
         print(json.dumps({'error': 'not found'}))
         return 2
-    # columns: id(0),run_uuid(1),parent_id(2),cmd(3),workdir(4),log_path(5),pid(6),status(7),started_at(8),finished_at(9),exit_code(10),commit_hash(11)
+    # columns: id(0),run_uuid(1),parent_id(2),cmd(3),workdir(4),log_path(5),pid(6),pid_start_time(7),pgid(8),status(9),started_at(10),finished_at(11),exit_code(12),signal(13),timeout_seconds(14),timeout_detected_at(15),grace_period_seconds(16),escalated_to_sigkill(17),abandoned_at(18),abandon_reason(19),last_known_pid(20),last_known_pgid(21),last_heartbeat(22),status_confidence(23),commit_hash(24)
     log_path = row[5]
     pid = row[6]
-    status = row[7]
-    try:
-        if pid is not None:
+    pid_start = row[7]
+    status = row[9]
+
+    # If terminal already, return it unchanged
+    if status in ('completed','failed','timed_out','abandoned','recovered'):
+        print(json.dumps({'id': run_id, 'status': status, 'finished_at': row[11], 'exit_code': row[12], 'log_path': log_path}))
+        return 0
+
+    alive = False
+    if pid is not None:
+        try:
             os.kill(pid, 0)
-            alive = True
-        else:
+            current_start = _proc_start_time(pid)
+            if pid_start and current_start:
+                if str(pid_start) == str(current_start):
+                    alive = True
+                else:
+                    alive = False
+            else:
+                # couldn't verify start time; assume alive but with low confidence
+                alive = True
+        except Exception:
             alive = False
-    except Exception:
-        alive = False
+
     conn = connect_db()
-    cur = conn.cursor()
+
     if alive:
-        # still running
-        cur.execute('UPDATE runs SET status=?, updated_at=? WHERE id=?', ('running', now_iso(), run_id))
-        conn.commit()
+        # still running: update last_known and leave status as running
+        try:
+            with conn:
+                conn.execute('UPDATE runs SET status=?, updated_at=?, last_known_pid=?, last_heartbeat=? WHERE id=?', ('running', now_iso(), pid, now_iso(), run_id))
+        except Exception:
+            pass
         print(json.dumps({'id': run_id, 'pid': pid, 'status': 'running', 'log_path': log_path}))
         return 0
-    else:
-        # process not alive -- try to collect exit_code by checking if finished_at recorded
-        if row[9]:
-            print(json.dumps({'id': run_id, 'status': row[7], 'finished_at': row[9], 'exit_code': row[10], 'log_path': log_path}))
-            return 0
-        else:
-            # mark interrupted
-            cur.execute('UPDATE runs SET status=?, finished_at=?, updated_at=? WHERE id=?', ('interrupted', now_iso(), now_iso(), run_id))
-            conn.commit()
-            print(json.dumps({'id': run_id, 'status': 'interrupted', 'log_path': log_path}))
-            return 0
+
+    # pid not alive or not verifiable
+    # inspect heartbeat freshness
+    hb_path = os.path.join(os.path.dirname(log_path), 'heartbeat.json')
+    hb_fresh = False
+    try:
+        if os.path.exists(hb_path):
+            mtime = os.path.getmtime(hb_path)
+            age = time.time() - mtime
+            if age <= HEARTBEAT_FRESHNESS_SECONDS:
+                hb_fresh = True
+    except Exception:
+        hb_fresh = False
+
+    if hb_fresh:
+        # finalization may be pending; do not overwrite DB state — return nonterminal assessment
+        print(json.dumps({'id': run_id, 'status': 'finalization_pending', 'log_path': log_path}))
+        return 0
+
+    # heartbeat not fresh; apply a short grace window before mutating
+    waited = 0
+    while waited < CHECKRUN_GRACE_SECONDS:
+        time.sleep(0.5)
+        waited += 0.5
+        # re-check heartbeat quickly
+        try:
+            if os.path.exists(hb_path):
+                mtime = os.path.getmtime(hb_path)
+                age = time.time() - mtime
+                if age <= HEARTBEAT_FRESHNESS_SECONDS:
+                    print(json.dumps({'id': run_id, 'status': 'finalization_pending', 'log_path': log_path}))
+                    return 0
+        except Exception:
+            pass
+
+    # re-read DB row to avoid stomping if monitor finished in the meantime
+    row2 = get_run(run_id)
+    if row2 and row2[11]:
+        # finished_at exists now — return authoritative
+        print(json.dumps({'id': run_id, 'status': row2[9], 'finished_at': row2[11], 'exit_code': row2[12], 'log_path': log_path}))
+        return 0
+
+    # finally, mark interrupted (provisional). This can be corrected later by the monitor.
+    try:
+        with conn:
+            conn.execute('UPDATE runs SET status=?, updated_at=?, last_known_pid=?, last_heartbeat=? WHERE id=?', ('interrupted', now_iso(), pid, now_iso(), run_id))
+            conn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (row[1], row[9], 'interrupted', 'checker', 'heartbeat-stale', json.dumps({'hb_exists': os.path.exists(hb_path)}), now_iso()))
+    except Exception:
+        pass
+    print(json.dumps({'id': run_id, 'status': 'interrupted', 'log_path': log_path}))
+    return 0
 
 
 def resume_run(run_id):
@@ -260,7 +665,9 @@ def resume_run(run_id):
     workdir = row[4]
     log_path = row[5]
     pid = row[6]
-    status = row[7]
+    pid_start = row[7]
+    pgid = row[8]
+    status = row[9]
 
     if status == 'running':
         print(json.dumps({'error': 'already running'}))
@@ -271,7 +678,15 @@ def resume_run(run_id):
     if pid:
         try:
             os.kill(pid, 0)
-            alive = True
+            current_start = _proc_start_time(pid)
+            if pid_start and current_start:
+                if str(pid_start) == str(current_start):
+                    alive = True
+                else:
+                    alive = False
+            else:
+                # no reliable start-time info; allow attach but low confidence
+                alive = True
         except Exception:
             alive = False
     if alive:
@@ -305,7 +720,10 @@ def resume_run(run_id):
                             }
                             with open(hb_path + '.tmp','w') as fh:
                                 fh.write(json.dumps(hb))
-                            os.replace(hb_path + '.tmp', hb_path)
+                            try:
+                                os.replace(hb_path + '.tmp', hb_path)
+                            except Exception:
+                                pass
                         except Exception:
                             pass
                         last_hb = now
@@ -343,6 +761,8 @@ def main():
     sstart = sub.add_parser('start')
     sstart.add_argument('--command', dest='command', required=True)
     sstart.add_argument('--workdir', required=False)
+    sstart.add_argument('--timeout', dest='timeout', type=int, default=0, help='timeout in seconds')
+    sstart.add_argument('--grace', dest='grace', type=int, default=5, help='grace period seconds before SIGKILL')
     sstatus = sub.add_parser('status')
     sstatus.add_argument('id', type=int)
     sub.add_parser('list')
@@ -356,7 +776,7 @@ def main():
         init_db()
         return
     if args.verb == 'start':
-        start_run(args.command, workdir=args.workdir)
+        start_run(args.command, workdir=args.workdir, timeout_seconds=getattr(args,'timeout',0), grace_period=getattr(args,'grace',5))
         return
 
     if args.verb == 'list':
