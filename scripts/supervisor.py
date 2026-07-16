@@ -282,7 +282,7 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                         pass
                     # attempt a conservative short-lived reconciliation: mark run as recovery-required if not terminal
                     try:
-                        import sqlite3 as _sqlite
+                        import sqlite3 as _sqlite, traceback as _tb
                         try:
                             fb = _sqlite.connect(DB_PATH, timeout=5)
                             fb.execute('PRAGMA journal_mode=WAL;')
@@ -299,17 +299,30 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                             os.makedirs(run_dir, exist_ok=True)
                                             with open(os.path.join(run_dir, 'monitor.finalization.json'), 'w') as mf:
                                                 json.dump({'run_uuid': run_uuid, 'result': 'recovery-required', 'signal': signum, 'timestamp': now_iso()}, mf)
-                                        except Exception:
-                                            pass
-                        except Exception:
-                            pass
+                                        except Exception as e_inner:
+                                            try:
+                                                with open(os.path.join(run_dir, 'monitor.err'), 'a') as me:
+                                                    me.write('finalization write failed in signal handler: ' + str(e_inner) + '\n')
+                                            except Exception:
+                                                pass
+                        except Exception as e_fb:
+                            try:
+                                with open(os.path.join(run_dir, 'monitor.err'), 'a') as me:
+                                    me.write('signal-handler DB error: ' + str(e_fb) + '\n')
+                                    me.write('\n'.join(_tb.format_exception(type(e_fb), e_fb, e_fb.__traceback__)))
+                            except Exception:
+                                pass
                         finally:
                             try:
                                 fb.close()
                             except Exception:
                                 pass
-                    except Exception:
-                        pass
+                    except Exception as e_outer:
+                        try:
+                            with open(os.path.join(run_dir, 'monitor.err'), 'a') as me:
+                                me.write('signal-handler outer error: ' + str(e_outer) + '\n')
+                        except Exception:
+                            pass
                     # exit with conventional code
                     os._exit(128 + signum)
                 try:
