@@ -259,12 +259,37 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
             timed_out = False
             heartbeat_last = None
             start_mon = time.monotonic()
+            # diagnostic: mark monitor loop entry
+            try:
+                with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                    md.write(f'MON_LOOP_START child_pid={child_pid} child_pgid={child_pgid} monotonic={start_mon}\n')
+                    md.flush()
+                    try:
+                        os.fsync(md.fileno())
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            loop_count = 0
             while True:
+                loop_count += 1
                 try:
                     pid_ret, status = os.waitpid(child_pid, os.WNOHANG)
                 except ChildProcessError:
                     pid_ret = 0
                     status = 0
+                # diagnostic: log first waitpid result or any non-zero result
+                try:
+                    if loop_count == 1 or pid_ret != 0:
+                        with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                            md.write(f'WAITPID_RESULT loop={loop_count} pid_ret={pid_ret} status={status}\n')
+                            md.flush()
+                            try:
+                                os.fsync(md.fileno())
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
                 now_mon = time.monotonic()
                 elapsed = now_mon - start_mon
                 try:
@@ -282,6 +307,22 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                     try:
                         with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
                             md.write(f'reaped child {child_pid} status={status}\n')
+                            md.flush()
+                            try:
+                                os.fsync(md.fileno())
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    # extra diagnostic tick: mark entry to finalization block
+                    try:
+                        with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                            md.write(f'ENTER_FINALIZATION pid={child_pid} status={status} monotonic={time.monotonic()}\n')
+                            md.flush()
+                            try:
+                                os.fsync(md.fileno())
+                            except Exception:
+                                pass
                     except Exception:
                         pass
                     exit_code = None
@@ -320,6 +361,7 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                         except Exception:
                             prev = None
 
+                        import random
                         for attempt, backoff in enumerate(retry_backoffs, start=1):
                             # test-only fault injection: raise a transient sqlite error once when requested by environment
                             try:
@@ -343,7 +385,7 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                     now_status = row_now[0] if row_now else None
                                     # If already terminal, respect it and don't overwrite
                                     if now_status in ('completed', 'failed', 'timed_out'):
-                                        attempt_info.append({'attempt': attempt, 'connection': 'main', 'started_at': started_at_attempt, 'result': 'already_terminal', 'row_status': now_status})
+                                        attempt_info.append({'attempt_number': attempt, 'connection_type': 'main', 'started_at': started_at_attempt, 'finished_at': now_iso(), 'result': 'already_terminal', 'row_status': now_status})
                                         success = True
                                         break
 
@@ -355,25 +397,30 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                     exists = cur_t.fetchone()[0]
                                     if not exists:
                                         mconn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, prev, final_status, 'monitor', 'process-exit', json.dumps({'exit_code': exit_code, 'signal': sig}), finished_at))
+
                                     try:
                                         with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
                                             md.write(f'finalized run in DB on attempt {attempt}\n')
                                     except Exception:
                                         pass
-                                    attempt_info.append({'attempt': attempt, 'connection': 'main', 'started_at': started_at_attempt, 'result': 'committed'})
+
+                                    attempt_info.append({'attempt_number': attempt, 'connection_type': 'main', 'started_at': started_at_attempt, 'finished_at': now_iso(), 'result': 'committed'})
                                     success = True
                                     break
                             except Exception as e:
+                                finished_at_attempt = now_iso()
+                                exc_class = type(e).__name__
                                 err_text = str(e)
                                 is_retryable = False
                                 try:
                                     if isinstance(e, _sqlite.OperationalError):
                                         el = err_text.lower()
-                                        if 'locked' in el or 'busy' in el or 'database is locked' in el or 'table is locked' in el or 'schema' in el:
+                                        if any(x in el for x in ('locked','busy','database is locked','table is locked','schema')):
                                             is_retryable = True
                                 except Exception:
                                     is_retryable = False
-                                attempt_info.append({'attempt': attempt, 'connection': 'main', 'started_at': started_at_attempt, 'exception': err_text, 'retryable': is_retryable})
+                                backoff_ms = int(backoff * 1000)
+                                attempt_info.append({'attempt_number': attempt, 'connection_type': 'main', 'started_at': started_at_attempt, 'finished_at': finished_at_attempt, 'exception_class': exc_class, 'sqlite_error': err_text, 'retryable': is_retryable, 'backoff_ms': backoff_ms})
                                 try:
                                     with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
                                         md.write(f'finalization attempt {attempt} failed: {err_text}\n')
@@ -381,14 +428,17 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                     pass
                                 if not is_retryable:
                                     break
-                                # backoff
-                                time.sleep(backoff)
+                                # backoff with small jitter
+                                jitter = random.uniform(0, 0.05)
+                                time.sleep(backoff + jitter)
 
                         if not success:
-                            # fallback: open a fresh short-lived connection and attempt once
+                            # fallback: close/discard main connection and open a fresh short-lived connection and attempt once
                             fb_started = now_iso()
                             try:
-                                if os.path.exists(mconn.database):
+                                try:
+                                    mconn.close()
+                                except Exception:
                                     pass
                             except Exception:
                                 pass
@@ -396,30 +446,11 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                 fb_conn = _sqlite.connect(DB_PATH, timeout=30)
                                 fb_conn.execute('PRAGMA journal_mode=WAL;')
                                 try:
-                                    with fb_conn:
-                                        cur_check = fb_conn.cursor()
-                                        cur_check.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
-                                        row_now = cur_check.fetchone()
-                                        now_status = row_now[0] if row_now else None
-                                        if now_status in ('completed', 'failed', 'timed_out'):
-                                            attempt_info.append({'attempt': 'fallback', 'connection': 'fallback', 'started_at': fb_started, 'result': 'already_terminal', 'row_status': now_status})
-                                            success = True
-                                        else:
-                                            fb_conn.execute('UPDATE runs SET status=?, finished_at=?, updated_at=?, exit_code=?, signal=? WHERE run_uuid=?', (final_status, finished_at, finished_at, exit_code, sig, run_uuid))
-                                            cur_t = fb_conn.cursor()
-                                            cur_t.execute('SELECT COUNT(1) FROM transitions WHERE run_uuid=? AND new_status=? AND source=? AND reason=?', (run_uuid, final_status, 'monitor', 'process-exit'))
-                                            exists = cur_t.fetchone()[0]
-                                            if not exists:
-                                                fb_conn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, prev, final_status, 'monitor', 'process-exit', json.dumps({'exit_code': exit_code, 'signal': sig, 'fallback': True}), finished_at))
-                                            attempt_info.append({'attempt': 'fallback', 'connection': 'fallback', 'started_at': fb_started, 'result': 'committed'})
-                                            success = True
-                                finally:
-                                    try:
-                                        fb_conn.close()
-                                    except Exception:
-                                        pass
-                            except Exception as e_fb:
-                                attempt_info.append({'attempt': 'fallback', 'connection': 'fallback', 'started_at': fb_started, 'exception': str(e_fb), 'retryable': False})
+                                    fb_conn.execute('PRAGMA busy_timeout = 5000;')
+                                except Exception:
+                                    pass
+                            except Exception as e_fb_open:
+                                attempt_info.append({'attempt_number': 'fallback', 'connection_type': 'fallback', 'started_at': fb_started, 'finished_at': now_iso(), 'exception_class': type(e_fb_open).__name__, 'sqlite_error': str(e_fb_open), 'retryable': False})
                                 try:
                                     with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
                                         import traceback as _tb
@@ -428,9 +459,54 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                                     pass
                                 try:
                                     with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
-                                        md.write('fallback finalization failed; see monitor.err\n')
+                                        md.write('unable to open fallback DB connection; see monitor.err\n')
                                 except Exception:
                                     pass
+                                success = False
+                                fb_conn = None
+
+                            if 'fb_conn' in locals() and fb_conn:
+                                try:
+                                    with fb_conn:
+                                        cur_check = fb_conn.cursor()
+                                        cur_check.execute('SELECT status FROM runs WHERE run_uuid=?', (run_uuid,))
+                                        row_now = cur_check.fetchone()
+                                        now_status = row_now[0] if row_now else None
+                                        rec = {'attempt_number': 'fallback', 'connection_type': 'fallback', 'started_at': fb_started}
+                                        rec['row_status_before'] = now_status
+                                        if now_status in ('completed', 'failed', 'timed_out'):
+                                            rec.update({'finished_at': now_iso(), 'result': 'already_terminal', 'row_status_after': now_status})
+                                            attempt_info.append(rec)
+                                            success = True
+                                        else:
+                                            fb_conn.execute('UPDATE runs SET status=?, finished_at=?, updated_at=?, exit_code=?, signal=? WHERE run_uuid=?', (final_status, finished_at, finished_at, exit_code, sig, run_uuid))
+                                            cur_t = fb_conn.cursor()
+                                            cur_t.execute('SELECT COUNT(1) FROM transitions WHERE run_uuid=? AND new_status=? AND source=? AND reason=?', (run_uuid, final_status, 'monitor', 'process-exit'))
+                                            exists = cur_t.fetchone()[0]
+                                            if not exists:
+                                                fb_conn.execute('INSERT INTO transitions (run_uuid, previous_status, new_status, source, reason, evidence, transitioned_at) VALUES (?,?,?,?,?,?,?)', (run_uuid, prev, final_status, 'monitor', 'process-exit', json.dumps({'exit_code': exit_code, 'signal': sig, 'fallback': True}), finished_at))
+                                            rec.update({'finished_at': now_iso(), 'result': 'committed', 'row_status_after': final_status})
+                                            attempt_info.append(rec)
+                                            success = True
+                                except Exception as e_fb:
+                                    rec = {'attempt_number': 'fallback', 'connection_type': 'fallback', 'started_at': fb_started, 'finished_at': now_iso(), 'exception_class': type(e_fb).__name__, 'sqlite_error': str(e_fb), 'retryable': False}
+                                    attempt_info.append(rec)
+                                    try:
+                                        with open(os.path.join(run_dir, 'monitor.err'), 'w') as me:
+                                            import traceback as _tb
+                                            me.write(_tb.format_exc())
+                                    except Exception:
+                                        pass
+                                    try:
+                                        with open(os.path.join(run_dir, 'monitor.debug'), 'a') as md:
+                                            md.write('fallback finalization failed; see monitor.err\n')
+                                    except Exception:
+                                        pass
+                                finally:
+                                    try:
+                                        fb_conn.close()
+                                    except Exception:
+                                        pass
 
                         # write attempt_info summary
                         try:
