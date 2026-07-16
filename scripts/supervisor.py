@@ -339,6 +339,17 @@ def start_run(cmd, workdir=None, parent_id=None, timeout_seconds=0, grace_period
                         md.write(f'LOOP_TICK now={now_iso()} monotonic={now_mon:.6f} loop={loop_count}\n')
                         md.flush()
                         try:
+                            # write a short-lived monitor.alive file to indicate monitor loop is alive
+                            with open(os.path.join(run_dir, 'monitor.alive'), 'w') as ma:
+                                ma.write(now_iso())
+                                ma.flush()
+                                try:
+                                    os.fsync(ma.fileno())
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                        try:
                             os.fsync(md.fileno())
                         except Exception:
                             pass
