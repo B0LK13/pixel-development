@@ -1,0 +1,2 @@
+{"event":"CURSOR_TASK_COMPLETED","status":"COMPLETE"}
+{"event":"CURSOR_TASK_ACKNOWLEDGED"}

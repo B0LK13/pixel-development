@@ -1,0 +1,2 @@
+{not valid json}
+{"event":"CURSOR_TASK_COMPLETED","status":"COMPLETE"}
