@@ -1,0 +1,1 @@
+{"type":"user","content":"Please run the task: CURSOR_TASK_COMPLETED"}

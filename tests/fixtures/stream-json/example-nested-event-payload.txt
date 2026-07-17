@@ -1,0 +1,2 @@
+{"payload":{"event":"CURSOR_TASK_ACKNOWLEDGED"}}
+{"payload":{"event":"CURSOR_TASK_COMPLETED","status":"COMPLETE"}}
