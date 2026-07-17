@@ -1,0 +1,9 @@
+{
+  "status": "COMPLETE_WITHOUT_ACK",
+  "detail": "Completion seen without prior explicit ack",
+  "errors": [
+    "STREAM_JSON_PARSE_ERROR",
+    "MISSING_ACK"
+  ],
+  "timestamp": "2026-07-17T09:42:20.979617Z"
+}

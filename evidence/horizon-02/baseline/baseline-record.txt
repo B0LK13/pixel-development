@@ -1,0 +1,50 @@
+Horizon 0.2 baseline record (Agent A role — coordinator-executed)
+================================================================
+Recorded: 2026-07-13 (UTC)
+Branch: auto/integrate-horizon-02-readiness
+Commit under test: cc5c0d3b8f3e3e6fe9cea0e09f1b0d06e23debbf
+  (tracker commit on main 5fd735b351c50182d308725525e066cf6ec2514c)
+
+Repository state
+----------------
+- main == origin/main @ 5fd735b3; working tree clean at gate start and
+  finish (git status --short empty both times).
+- Commit signatures: authored commits verify locally (G, key
+  0F8A4FD173240A4B); merge commits carry GitHub web-flow signatures
+  (GraphQL state VALID — local keyring cannot verify web-flow keys,
+  expected).
+- Branch protection on main (captured 2026-07-13, host file
+  /tmp/h02/protection-baseline.json): approvals 0 (single-maintainer
+  mode, docs/MAIN_BRANCH_PROTECTION.md §7); required checks suite +
+  release-candidate-check, strict; conversation resolution on;
+  enforce_admins on; required signatures on; force-push off;
+  deletion off; linear history off.
+- Open PRs: none. Watchers/cron jobs: none.
+
+Gate results (raw logs host-only: /tmp/h02/baseline-*.txt)
+----------------------------------------------------------
+gate window: 2026-07-13T21:16:19Z -> 2026-07-13T21:32:59Z (16m40s)
+- git diff --check:                       rc=0 (clean)
+- scripts/check-github-action-pins.py:    rc=0 (1 workflow file, 2 uses
+                                          refs, 0 violations)
+- bash tests/run_tests.sh:                rc=0 — 327 passed / 0 failed /
+                                          0 skipped
+- bash scripts/ci-local.sh:               rc=0 (ALL GATES PASSED —
+                                          whitespace, checksum lockstep,
+                                          bash -n, shellcheck, pin gate,
+                                          full suite)
+- working tree:                           rc=0 (clean)
+
+Suite-verified guarantees (inside tests/run_tests.sh)
+-----------------------------------------------------
+- unsigned bundle verification: verdict verified-integrity-only (fixture)
+- signed fixture verification: verdict verified-signed + failure injection
+- reproducibility: byte-identical rebuild check
+- key-material scan: 0 markers across repository
+- action-pin enforcement: repository workflows comply
+
+Conclusion
+----------
+Baseline green. Downstream execution (Phases 3–7) proceeded in parallel
+during this gate per the swarm plan; all specialist outputs merge onto
+this verified baseline.

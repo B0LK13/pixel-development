@@ -1,0 +1,34 @@
+# section_id	check_id	title	dependencies	tags	expected_duration	supported_platforms
+0	harness.required-files	Required files	-	harness,smoke	short	all
+1	shell.syntax	Syntax (every tracked shell script)	0	shell,lint	short	all
+2	shell.shellcheck	Shellcheck (severity warning and up), every tracked shell script	1	shell,lint	medium	linux
+3	cli.help-contract	--help / unknown-flag contract	0	cli,contract	medium	all
+4	metadata.pixel-lab-json	.pixel-lab.json validity	0	metadata	short	all
+5	autodev.dry-run	pixel-autodev.sh dry-run behaviour	0,4	autodev,fixture	medium	linux
+6	cli.timeout-contract	--timeout contract	5	cli,autodev	medium	linux
+7	cli.contract-extras	CLI contract extras (document current behaviour)	3,6	cli,contract	medium	all
+8	harness.clean-clone	clean-clone smoke (fast, hermetic, non-recursive)	0,1,3	harness,clone	long	linux
+9	apps.ssh-port-contract	--ssh-port contract (pixel-apps-setup.sh)	3	cli,apps	medium	all
+10	autodev.numeric-flags	numeric flag contract (pixel-autodev.sh)	3,5	cli,autodev	medium	all
+11	autodev.agent-enum	--agent enum contract (pixel-autodev.sh)	3,5	cli,autodev	short	all
+12	cli.end-of-options	end-of-options + positional arguments (all scripts)	3	cli,contract	short	all
+13	autodev.preflight-tools	tool preflight contract (pixel-autodev.sh)	5	autodev,preflight	medium	linux
+14	repo.line-endings	line-ending contract (audit R6)	0	repo,policy	short	all
+15	autodev.dependency-seam	dependency-resolution seam (pixel-autodev.sh preflight)	5,13	autodev,security	medium	linux
+16	bootstrap.checksum-lockstep	bootstrap checksum manifest lockstep (audit R1)	0	bootstrap,integrity	short	all
+17	bootstrap.download-verification	bootstrap download verification, functional (audit R1)	16	bootstrap,integrity,security	medium	linux
+18	bootstrap.anchor-install-flow	bootstrap anchor install-flow contract (README §1)	16,17	bootstrap,trust	medium	all
+19	bootstrap.signature-fixtures	signature verification fixtures (bootstrap trust model, tier 2)	18	signing,bootstrap	medium	linux
+20	bootstrap.checksum-lifecycle-tool	checksum lifecycle tool (scripts/update-bootstrap-checksums.sh)	16	bootstrap,integrity	medium	all
+21	release.process-governance	release-process governance (docs/BOOTSTRAP_RELEASE_PROCESS.md)	20	release,docs	short	all
+22	ci.parity-static	CI parity (workflow vs scripts/ci-local.sh, static)	3,20	ci,workflow	medium	all
+23	security.invariants	session-5 security invariants (bootstrap trust + lifecycle)	16,17,19	security,bootstrap	medium	linux
+24	release.candidate-builder	release candidate builder (scripts/build-release-candidate.sh)	21	release,build	medium	linux
+25	release.bundle-verifier-integrity	release bundle verifier: integrity + failure injection	24	release,verify	medium	linux
+26	release.bundle-verifier-signed	release bundle verifier: signed fixtures (tier 2)	25	signing,release	medium	linux
+27	release.reproducibility	release reproducibility (SOURCE_DATE_EPOCH)	24	release,reproducibility	medium	linux
+28	release.documentation-contracts	release documentation contracts (§5 docs + verifier hygiene)	21,24,25,27	docs,release	short	all
+29	repo.readiness	repository readiness (session 7)	0	repo,docs	short	all
+30	workflow.action-pins	GitHub Actions pinning policy (session 10)	22	workflow,security	short	all
+31	agent.os-validation	agent operating system checks (session 14)	30	agent-os,governance	long	all
+32	harness.robustness-recovery	agent-os harness robustness & recovery checks (session 15)	31	harness,recovery,robustness	medium	all

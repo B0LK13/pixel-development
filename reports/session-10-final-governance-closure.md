@@ -44,7 +44,7 @@ Consequences and handling:
 | Check | Result | Evidence |
 |---|---|---|
 | Test suite | 327 passed / 0 failed / 0 skipped | `evidence/session-10/post-merge-gate-summary.txt` |
-| ci-local parity | exit 0, ALL GATES PASSED | `evidence/session-10/post-merge-ci-local.log` |
+| ci-local parity | exit 0, ALL GATES PASSED | `evidence/session-10/final-ci-local.txt` |
 | Action-pin enforcement | 0 violations | `scripts/check-github-action-pins.py` (CI job green) |
 | Unsigned release verification | verified-integrity-only | `evidence/session-10/post-merge-release-validation.txt` |
 | Signed fixture verification | verified-signed | `evidence/session-10/post-merge-release-validation.txt` |

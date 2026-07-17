@@ -57,7 +57,7 @@ Full protection state on `main` after enablement (verified 2026-07-13):
 | Disposition | **closed unmerged by the operator** (B0LK13), 2026-07-13T15:42:57Z |
 | Content preservation | its single commit (adds `evidence/session-10/protection-verification.txt`, 56 lines) cherry-picked into this branch as `4c48e87` (signed) — no evidence lost |
 | Local tests at base | 327 passed / 0 failed / 0 skipped on `0508a04` (see `evidence/session-10/post-merge-gate-summary.txt`) |
-| ci-local at base | exit 0, ALL GATES PASSED (see `evidence/session-10/post-merge-ci-local.log`) |
+| ci-local at base | exit 0, ALL GATES PASSED (see `evidence/session-10/final-ci-local.txt`) |
 | Remote runs at base | 29236663421 (`2e0e043`) green; 29236874256 (`0508a04`) green |
 
 ## Security boundaries

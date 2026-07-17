@@ -25,6 +25,12 @@ exit codes are normative in `docs/CLI_CONTRACT.md` and
 | build a release candidate | `SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" bash scripts/build-release-candidate.sh --version=X.Y.Z` | refuses dirty trees; `--check` validates without writing |
 | refresh checksum pins after editing a pinned script | `bash scripts/update-bootstrap-checksums.sh --write`, then `--check` | same commit as the edit |
 | local CI parity | `bash scripts/ci-local.sh` | same gates as `.github/workflows/test.yml`, fail-fast |
+| local CI parity (JSON) | `bash scripts/ci-local.sh --json` | machine-readable gate summary (`schemas/ci-result.schema.json`) |
+| harness sections/tests list | `bash tests/run_tests.sh --list` | stable section/test IDs for targeted runs |
+| targeted harness run | `bash tests/run_tests.sh --test=<id>` / `--section=<n>` / `--changed` | iteration only; full gate still mandatory |
+| harness JSON summary | `bash tests/run_tests.sh --json` | machine-readable suite result (`schemas/test-result.schema.json`) |
+| agent context snapshot | `bash scripts/agent-context.sh --format markdown` | includes branch, dirty state, gates, reports, risk classification |
+| agent context JSON | `bash scripts/agent-context.sh --format json` | machine-readable context (`schemas/agent-context.schema.json`) |
 | inspect a remote CI run | `gh run list --branch <branch>`, `gh run watch <run-id>` | runbook: `docs/REMOTE_CI_VERIFICATION.md` |
 
 ## Audit CI supply chain

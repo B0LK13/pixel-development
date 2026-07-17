@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentTask",
+  "type": "object",
+  "required": ["id", "goal", "scope", "constraints", "required_checks"],
+  "properties": {
+    "id": { "type": "string" },
+    "goal": { "type": "string" },
+    "scope": { "type": "string" },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "required_checks": { "type": "array", "items": { "type": "string" } },
+    "operator_actions": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}
+

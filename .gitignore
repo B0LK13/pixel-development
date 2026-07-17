@@ -8,6 +8,7 @@
 # scratch
 *.tmp
 *.bak
+.codebase-memory/
 dist/
 # language junk
 __pycache__/

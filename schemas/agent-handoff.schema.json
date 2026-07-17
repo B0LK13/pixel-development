@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentHandoff",
+  "type": "object",
+  "required": ["starting_state", "changes", "validation", "security_invariants", "readiness"],
+  "properties": {
+    "starting_state": { "type": "string" },
+    "changes": { "type": "string" },
+    "commits": { "type": "array", "items": { "type": "string" } },
+    "validation": { "type": "object" },
+    "evidence": { "type": "array", "items": { "type": "string" } },
+    "security_invariants": { "type": "array", "items": { "type": "string" } },
+    "deferred_work": { "type": "array", "items": { "type": "string" } },
+    "readiness": { "type": "string" },
+    "operator_commands": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}
+
