@@ -1,0 +1,17 @@
+{
+  "example-ack-complete.txt": { "expected_status": "COMPLETE", "expected_exit": 0, "expected_errors": [] },
+  "example-completion-only.txt": { "expected_status": "COMPLETE_WITHOUT_ACK", "expected_exit": 3, "expected_errors": ["MISSING_ACK"] },
+  "example-malformed-line.txt": { "expected_status": "COMPLETE_WITHOUT_ACK", "expected_exit": 3, "expected_errors": ["STREAM_JSON_PARSE_ERROR","MISSING_ACK"] },
+  "example-echoed-user-prompt.txt": { "expected_status": "FAIL", "expected_exit": 3, "expected_errors": ["UNSUPPORTED_STREAM_ENVELOPE"] },
+  "example-system-envelope.txt": { "expected_status": "FAIL", "expected_exit": 3, "expected_errors": ["UNSUPPORTED_STREAM_ENVELOPE"] },
+  "example-assistant-prose.txt": { "expected_status": "FAIL", "expected_exit": 3, "expected_errors": ["UNSUPPORTED_STREAM_ENVELOPE"] },
+  "example-completion-before-ack.txt": { "expected_status": "COMPLETE_WITHOUT_ACK", "expected_exit": 3, "expected_errors": ["MISSING_ACK"] },
+  "example-dup-ack.txt": { "expected_status": "FAIL", "expected_exit": 3, "expected_errors": ["NO_COMPLETION"] },
+  "example-dup-completion.txt": { "expected_status": "COMPLETE_WITHOUT_ACK", "expected_exit": 3, "expected_errors": ["MISSING_ACK"] },
+  "example-valid-json-no-event.txt": { "expected_status": "FAIL", "expected_exit": 3, "expected_errors": ["UNSUPPORTED_STREAM_ENVELOPE"] },
+  "example-nested-event-payload.txt": { "expected_status": "COMPLETE", "expected_exit": 0, "expected_errors": [] },
+  "example-unsupported-envelope.txt": { "expected_status": "FAIL", "expected_exit": 3, "expected_errors": ["UNSUPPORTED_STREAM_ENVELOPE"] },
+  "example-noncomplete-status.txt": { "expected_status": "COMPLETE_WITH_NONCOMPLETE_STATUS", "expected_exit": 3, "expected_errors": ["COMPLETION_NONCOMPLETE"] },
+  "example-missing-status.txt": { "expected_status": "FAIL", "expected_exit": 3, "expected_errors": ["MALFORMED_PROTOCOL_EVENT"] },
+  "example-original-crash.txt": { "expected_status": "FAIL", "expected_exit": 3, "expected_errors": ["MALFORMED_PROTOCOL_EVENT","STREAM_JSON_PARSE_ERROR"] }
+}
